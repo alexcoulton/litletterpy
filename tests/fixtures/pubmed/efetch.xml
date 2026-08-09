@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PubmedArticleSet>
+  <PubmedArticle>
+    <MedlineCitation>
+      <PMID Version="1">111</PMID>
+      <DateRevised>
+        <Year>2026</Year>
+        <Month>08</Month>
+        <Day>09</Day>
+      </DateRevised>
+      <Article>
+        <Journal>
+          <JournalIssue>
+            <PubDate>
+              <Year>2026</Year>
+              <Month>Aug</Month>
+            </PubDate>
+          </JournalIssue>
+          <Title>Journal of Useful Results</Title>
+          <ISOAbbreviation>J Useful Results</ISOAbbreviation>
+        </Journal>
+        <ArticleTitle>A <i>single-cell</i> atlas of useful tissue</ArticleTitle>
+        <ELocationID EIdType="doi">10.1000/fallback</ELocationID>
+        <Abstract>
+          <AbstractText Label="BACKGROUND">Cells are complicated.</AbstractText>
+          <AbstractText Label="RESULTS">We found <b>three</b> populations.</AbstractText>
+        </Abstract>
+        <AuthorList>
+          <Author>
+            <LastName>Lovelace</LastName>
+            <ForeName>Ada</ForeName>
+            <Initials>A</Initials>
+            <Identifier Source="ORCID">0000-0001-2345-6789</Identifier>
+          </Author>
+          <Author>
+            <CollectiveName>The Atlas Consortium</CollectiveName>
+          </Author>
+        </AuthorList>
+        <ArticleDate DateType="Electronic">
+          <Year>2026</Year>
+          <Month>08</Month>
+          <Day>08</Day>
+        </ArticleDate>
+      </Article>
+    </MedlineCitation>
+    <PubmedData>
+      <ArticleIdList>
+        <ArticleId IdType="pubmed">111</ArticleId>
+        <ArticleId IdType="doi">10.1000/useful.111</ArticleId>
+      </ArticleIdList>
+    </PubmedData>
+  </PubmedArticle>
+  <PubmedArticle>
+    <MedlineCitation>
+      <PMID Version="1">222</PMID>
+      <Article>
+        <Journal>
+          <JournalIssue>
+            <PubDate>
+              <MedlineDate>2026 Jul-Aug</MedlineDate>
+            </PubDate>
+          </JournalIssue>
+          <ISOAbbreviation>Prelim Rep</ISOAbbreviation>
+        </Journal>
+        <ArticleTitle>A preliminary report</ArticleTitle>
+        <AuthorList>
+          <Author>
+            <LastName>Hopper</LastName>
+            <Initials>GH</Initials>
+            <Suffix>Jr</Suffix>
+          </Author>
+        </AuthorList>
+      </Article>
+    </MedlineCitation>
+    <PubmedData>
+      <ArticleIdList>
+        <ArticleId IdType="pubmed">222</ArticleId>
+      </ArticleIdList>
+    </PubmedData>
+  </PubmedArticle>
+</PubmedArticleSet>

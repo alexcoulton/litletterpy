@@ -1,0 +1,22 @@
+{
+  "messages": [
+    {
+      "status": "ok",
+      "interval": "2026-08-01:2026-08-09",
+      "cursor": 2,
+      "count": 1,
+      "total": "3"
+    }
+  ],
+  "collection": [
+    {
+      "doi": "10.1101/2026.08.06.111111",
+      "title": "An earlier preprint",
+      "authors": "Dorothy Vaughan",
+      "date": "2026-08-06",
+      "version": "1",
+      "category": "genomics",
+      "abstract": ""
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "messages": [
+    {
+      "status": "ok",
+      "interval": "2026-08-01:2026-08-09",
+      "cursor": 0,
+      "count": 2,
+      "total": "3"
+    }
+  ],
+  "collection": [
+    {
+      "doi": "10.1101/2026.08.08.123456",
+      "title": "A spatial atlas of the liver",
+      "authors": "Ada Lovelace; Grace Hopper",
+      "date": "2026-08-08",
+      "version": "1",
+      "category": "bioinformatics",
+      "abstract": "  We mapped many cells.  "
+    },
+    {
+      "doi": "10.1101/2026.08.07.654321",
+      "title": "Protein models at scale",
+      "authors": "Katherine Johnson",
+      "date": "2026-08-07",
+      "version": "2",
+      "category": "systems biology",
+      "abstract": "We trained a model."
+    }
+  ]
+}
