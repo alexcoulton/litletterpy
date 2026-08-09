@@ -127,6 +127,26 @@ class PubMedClient:
             return []
 
         term = _with_date_range(query, since, until)
+        return self._retrieve(term, max_results=max_results)
+
+    def fetch(
+        self,
+        *,
+        since: date,
+        until: date,
+        max_results: int | None = None,
+    ) -> list[Paper]:
+        """Return every PubMed record entering the database in a date range."""
+        _validate_date_range(since, until)
+        _validate_max_results(max_results)
+        if max_results == 0:
+            return []
+        return self._retrieve(
+            _date_range_filter(since, until),
+            max_results=max_results,
+        )
+
+    def _retrieve(self, term: str, *, max_results: int | None) -> list[Paper]:
         identifiers = self._search_ids(term, max_results=max_results)
         papers: list[Paper] = []
         for batch in _batched(identifiers, self._fetch_batch_size):
@@ -351,9 +371,13 @@ def _text(element: ET.Element | None) -> str | None:
 def _with_date_range(query: str, since: date | None, until: date | None) -> str:
     if since is None and until is None:
         return query
+    return f"({query}) AND ({_date_range_filter(since, until)})"
+
+
+def _date_range_filter(since: date | None, until: date | None) -> str:
     lower = since.strftime("%Y/%m/%d") if since else "1900"
     upper = until.strftime("%Y/%m/%d") if until else "3000"
-    return f"({query}) AND ({lower}:{upper}[EDAT])"
+    return f"{lower}:{upper}[EDAT]"
 
 
 def _validate_date_range(since: date | None, until: date | None) -> None:

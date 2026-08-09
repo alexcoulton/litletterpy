@@ -105,6 +105,31 @@ def test_search_honors_zero_max_results_without_request() -> None:
         assert client.search("cancer", max_results=0) == []
 
 
+def test_fetch_uses_only_the_entrez_date_range() -> None:
+    terms: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        terms.append(request.url.params["term"])
+        return httpx.Response(
+            200,
+            json={"esearchresult": {"count": "0", "idlist": []}},
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as http_client:
+        client = PubMedClient(
+            email="reader@example.com",
+            requests_per_second=0,
+            http_client=http_client,
+        )
+        papers = client.fetch(
+            since=date(2026, 8, 1),
+            until=date(2026, 8, 9),
+        )
+
+    assert papers == []
+    assert terms == ["2026/08/01:2026/08/09[EDAT]"]
+
+
 def test_search_rejects_more_than_esearch_can_expose() -> None:
     def handler(_: httpx.Request) -> httpx.Response:
         return httpx.Response(
