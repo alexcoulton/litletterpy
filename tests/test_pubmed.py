@@ -13,7 +13,7 @@ from litletter.errors import (
     ResponseParseError,
 )
 from litletter.models import PaperSource
-from litletter.sources import PubMedClient
+from litletter.sources import PubMedClient, PubMedDateField
 
 
 def test_search_paginates_and_normalizes_records(fixture_dir: Path) -> None:
@@ -131,6 +131,76 @@ def test_fetch_uses_only_the_entrez_date_range() -> None:
 
     assert papers == []
     assert terms == ["2026/08/01:2026/08/09[EDAT]"]
+
+
+def test_search_can_use_publication_date_range() -> None:
+    terms: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        terms.append(request.url.params["term"])
+        return httpx.Response(
+            200,
+            json={"esearchresult": {"count": "0", "idlist": []}},
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as http_client:
+        client = PubMedClient(
+            email="reader@example.com",
+            date_field=PubMedDateField.PUBLICATION,
+            requests_per_second=0,
+            http_client=http_client,
+        )
+        papers = client.search(
+            "cancer",
+            since=date(2026, 8, 1),
+            until=date(2026, 8, 9),
+        )
+
+    assert papers == []
+    assert terms == ["(cancer) AND (2026/08/01:2026/08/09[PDAT])"]
+
+
+def test_publication_date_range_is_enforced_on_normalized_records(
+    fixture_dir: Path,
+) -> None:
+    efetch_xml = (fixture_dir / "pubmed" / "efetch.xml").read_text()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/esearch.fcgi"):
+            return httpx.Response(
+                200,
+                json={
+                    "esearchresult": {
+                        "count": "2",
+                        "retmax": "2",
+                        "retstart": "0",
+                        "idlist": ["111", "222"],
+                    }
+                },
+            )
+        if request.url.path.endswith("/efetch.fcgi"):
+            return httpx.Response(200, text=efetch_xml)
+        raise AssertionError(f"unexpected request: {request.url}")
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as http_client:
+        client = PubMedClient(
+            email="reader@example.com",
+            date_field=PubMedDateField.PUBLICATION,
+            requests_per_second=0,
+            http_client=http_client,
+        )
+        papers = client.search(
+            "cancer",
+            since=date(2026, 8, 1),
+            until=date(2026, 8, 9),
+        )
+
+    assert [paper.source_id for paper in papers] == ["111"]
+
+
+def test_client_rejects_unknown_date_field() -> None:
+    with pytest.raises(ValueError, match="date_field"):
+        PubMedClient(email="reader@example.com", date_field="created")
 
 
 def test_search_rejects_more_than_esearch_can_expose() -> None:

@@ -22,11 +22,21 @@ uv run ruff format --check .
 ```python
 from datetime import date
 
-from litletter.sources import BioRxivClient, PubMedClient
+from litletter.sources import BioRxivClient, PubMedClient, PubMedDateField
 
 with PubMedClient(email="you@example.com") as pubmed:
     papers = pubmed.search(
         '"single cell"[Title/Abstract] AND cancer[Title/Abstract]',
+        since=date(2026, 8, 1),
+        until=date(2026, 8, 9),
+    )
+
+with PubMedClient(
+    email="you@example.com",
+    date_field=PubMedDateField.PUBLICATION,
+) as pubmed:
+    papers_published_in_range = pubmed.search(
+        "cancer[Title/Abstract]",
         since=date(2026, 8, 1),
         until=date(2026, 8, 9),
     )
@@ -41,6 +51,13 @@ with BioRxivClient() as biorxiv:
 PubMed accepts a native PubMed query. The official bioRxiv API lists records by
 date rather than performing Boolean title/abstract searches, so Litletter's
 matching layer evaluates normalized records locally.
+
+PubMed date bounds use its Entrez date by default: the date a record entered the
+database, which is appropriate for a daily discovery job. Construct a client
+with `date_field=PubMedDateField.PUBLICATION` when the window should instead
+mean the paper's publication date, as in a retrospective "past month" search.
+Publication mode also enforces the range against Litletter's normalized date,
+which prefers an electronic publication date over a later journal issue date.
 
 ## Matching papers
 

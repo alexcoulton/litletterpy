@@ -7,6 +7,7 @@ import re
 import xml.etree.ElementTree as ET
 from collections.abc import Iterator
 from datetime import date
+from enum import StrEnum
 from typing import Any
 
 import httpx
@@ -20,6 +21,10 @@ _LOGGER = logging.getLogger(__name__)
 _ESEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 _EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 _MAX_ACCESSIBLE_RESULTS = 10_000
+_DATE_FIELD_TAGS = {
+    "entrez": "EDAT",
+    "publication": "PDAT",
+}
 _MONTHS = {
     "jan": 1,
     "january": 1,
@@ -48,6 +53,13 @@ _MONTHS = {
 }
 
 
+class PubMedDateField(StrEnum):
+    """PubMed date used to constrain a search or date-only fetch."""
+
+    ENTREZ = "entrez"
+    PUBLICATION = "publication"
+
+
 class PubMedClient:
     """Fetch and normalize papers through PubMed ESearch and EFetch."""
 
@@ -61,6 +73,7 @@ class PubMedClient:
         max_retries: int = 3,
         search_page_size: int = 5_000,
         fetch_batch_size: int = 200,
+        date_field: PubMedDateField | str = PubMedDateField.ENTREZ,
         requests_per_second: float | None = None,
         http_client: httpx.Client | None = None,
     ) -> None:
@@ -79,12 +92,17 @@ class PubMedClient:
             raise ValueError("search_page_size must be between 1 and 10,000")
         if fetch_batch_size < 1:
             raise ValueError("fetch_batch_size must be greater than zero")
+        try:
+            normalized_date_field = PubMedDateField(date_field)
+        except ValueError as exc:
+            raise ValueError("date_field must be 'entrez' or 'publication'") from exc
 
         self._email = email
         self._api_key = api_key
         self._tool = tool
         self._search_page_size = search_page_size
         self._fetch_batch_size = fetch_batch_size
+        self._date_field = normalized_date_field
         request_rate = requests_per_second
         if request_rate is None:
             request_rate = 10.0 if api_key else 3.0
@@ -117,9 +135,9 @@ class PubMedClient:
     ) -> list[Paper]:
         """Search PubMed and return normalized papers.
 
-        ``query`` uses PubMed's native query syntax. Date bounds constrain the
-        PubMed Entrez date (``EDAT``), which reflects when a record entered the
-        database and is suitable for recurring discovery jobs.
+        ``query`` uses PubMed's native query syntax. Date bounds use the date
+        field selected when constructing the client. The default Entrez date
+        reflects when a record entered PubMed and suits recurring discovery.
         """
         query = query.strip()
         if not query:
@@ -129,8 +147,9 @@ class PubMedClient:
         if max_results == 0:
             return []
 
-        term = _with_date_range(query, since, until)
-        return self._retrieve(term, max_results=max_results)
+        term = _with_date_range(query, since, until, self._date_field)
+        papers = self._retrieve(term, max_results=max_results)
+        return self._filter_publication_range(papers, since, until)
 
     def fetch(
         self,
@@ -139,15 +158,40 @@ class PubMedClient:
         until: date,
         max_results: int | None = None,
     ) -> list[Paper]:
-        """Return every PubMed record entering the database in a date range."""
+        """Return every PubMed record in the selected date-field range."""
         _validate_date_range(since, until)
         _validate_max_results(max_results)
         if max_results == 0:
             return []
-        return self._retrieve(
-            _date_range_filter(since, until),
+        papers = self._retrieve(
+            _date_range_filter(since, until, self._date_field),
             max_results=max_results,
         )
+        return self._filter_publication_range(papers, since, until)
+
+    def _filter_publication_range(
+        self,
+        papers: list[Paper],
+        since: date | None,
+        until: date | None,
+    ) -> list[Paper]:
+        if self._date_field is not PubMedDateField.PUBLICATION or (
+            since is None and until is None
+        ):
+            return papers
+        filtered = [
+            paper
+            for paper in papers
+            if paper.published_at is not None
+            and (since is None or paper.published_at >= since)
+            and (until is None or paper.published_at <= until)
+        ]
+        _LOGGER.debug(
+            "Publication-date normalization retained %d of %d PubMed records",
+            len(filtered),
+            len(papers),
+        )
+        return filtered
 
     def _retrieve(self, term: str, *, max_results: int | None) -> list[Paper]:
         identifiers = self._search_ids(term, max_results=max_results)
@@ -394,16 +438,25 @@ def _text(element: ET.Element | None) -> str | None:
     return normalized or None
 
 
-def _with_date_range(query: str, since: date | None, until: date | None) -> str:
+def _with_date_range(
+    query: str,
+    since: date | None,
+    until: date | None,
+    date_field: PubMedDateField,
+) -> str:
     if since is None and until is None:
         return query
-    return f"({query}) AND ({_date_range_filter(since, until)})"
+    return f"({query}) AND ({_date_range_filter(since, until, date_field)})"
 
 
-def _date_range_filter(since: date | None, until: date | None) -> str:
+def _date_range_filter(
+    since: date | None,
+    until: date | None,
+    date_field: PubMedDateField,
+) -> str:
     lower = since.strftime("%Y/%m/%d") if since else "1900"
     upper = until.strftime("%Y/%m/%d") if until else "3000"
-    return f"{lower}:{upper}[EDAT]"
+    return f"{lower}:{upper}[{_DATE_FIELD_TAGS[date_field]}]"
 
 
 def _validate_date_range(since: date | None, until: date | None) -> None:

@@ -8,7 +8,7 @@ from datetime import date, timedelta
 
 from litletter import discover_papers, get_journal_catalog, parse_query
 from litletter.query import compile_pubmed_candidate_query
-from litletter.sources import BioRxivClient, PubMedClient
+from litletter.sources import PubMedClient, PubMedDateField
 
 logging.basicConfig(format="%(levelname)s %(name)s: %(message)s")
 logging.getLogger("litletter").setLevel(logging.INFO)
@@ -19,7 +19,7 @@ AND journal_group:flagship_nsc
 """.strip()
 
 until = date.today()
-since = until - timedelta(days=7)
+since = until - timedelta(days=30)
 ncbi_email = os.environ["LITLETTER_NCBI_EMAIL"]
 ncbi_api_key = os.environ.get("LITLETTER_NCBI_API_KEY")
 
@@ -43,26 +43,26 @@ pubmed_candidate_query = compile_pubmed_candidate_query(query)
 
 # Create the source clients
 
-pubmed = PubMedClient(email=ncbi_email, api_key=ncbi_api_key)
-biorxiv = BioRxivClient()
+pubmed = PubMedClient(
+    email=ncbi_email,
+    api_key=ncbi_api_key,
+    date_field=PubMedDateField.PUBLICATION,
+)
 
 
-# Fetch candidates from both APIs and apply the local query
+# Fetch PubMed candidates and apply the exact local query
 
 papers = discover_papers(
     query,
     since=since,
     until=until,
     pubmed=pubmed,
-    biorxiv=biorxiv,
-    max_pubmed_candidates=100,
-    max_biorxiv_candidates=100,
 )
 
 len(papers)
 
 
-# Examine a compact view of the first results
+# Examine a compact view of every result
 
 [
     (
@@ -72,7 +72,7 @@ len(papers)
         paper.title,
         paper.doi,
     )
-    for paper in papers[:10]
+    for paper in papers
 ]
 
 
@@ -91,4 +91,3 @@ paper
 # Close the clients when finished
 
 pubmed.close()
-biorxiv.close()
