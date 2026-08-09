@@ -119,3 +119,8 @@ remain available for inspection, including `query`, `pubmed_candidate_query`,
 the source clients, and the final `papers` list. Edit `query_text`, the date
 range, and candidate limits directly in the first blocks. An optional NCBI API
 key can be supplied through `LITLETTER_NCBI_API_KEY`.
+
+The scratchpad enables `INFO` logging for the `litletter` package, showing the
+date window, PubMed selector, source candidate counts, local match counts, and
+the final total while discovery runs. Change `logging.INFO` to `logging.DEBUG`
+in the first block to additionally see PubMed batches and source pagination.

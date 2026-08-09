@@ -2,12 +2,16 @@
 
 # Imports and editable inputs
 
+import logging
 import os
 from datetime import date, timedelta
 
 from litletter import discover_papers, parse_query
 from litletter.query import compile_pubmed_candidate_query
 from litletter.sources import BioRxivClient, PubMedClient
+
+logging.basicConfig(format="%(levelname)s %(name)s: %(message)s")
+logging.getLogger("litletter").setLevel(logging.INFO)
 
 query_text = """
 title_abstract:("spatial transcriptomics" OR single-cell)

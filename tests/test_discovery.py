@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import date
 
@@ -152,6 +153,30 @@ def test_discovery_fetches_both_sources_then_filters_and_sorts() -> None:
     assert pubmed.searches == [("cancer[Title]", start, end, 50)]
     assert pubmed.fetches == []
     assert biorxiv.fetches == [(start, end, 75)]
+
+
+def test_discovery_logs_source_progress(caplog: pytest.LogCaptureFixture) -> None:
+    today = date(2026, 8, 9)
+    caplog.set_level(logging.INFO, logger="litletter.discovery")
+
+    discover_papers(
+        "cancer",
+        since=today,
+        until=today,
+        pubmed=FakePubMed([]),
+        biorxiv=FakeBioRxiv([]),
+    )
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert messages == [
+        "Discovering papers from 2026-08-09 through 2026-08-09 using "
+        "PubMed and bioRxiv",
+        "Fetching PubMed candidates with selector: cancer[Title/Abstract]",
+        "PubMed fetched 0 candidates; 0 matched locally",
+        "Fetching bioRxiv candidates by date",
+        "bioRxiv fetched 0 candidates; 0 matched locally",
+        "Discovery complete: 0 matching papers",
+    ]
 
 
 def test_discovery_uses_date_only_pubmed_fetch_without_positive_selector() -> None:

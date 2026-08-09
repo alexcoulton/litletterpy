@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import Iterator
@@ -13,6 +14,8 @@ import httpx
 from litletter.errors import PubMedResultLimitError, ResponseParseError
 from litletter.models import Author, Paper, PaperSource
 from litletter.sources._http import HttpRequester
+
+_LOGGER = logging.getLogger(__name__)
 
 _ESEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 _EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
@@ -178,6 +181,11 @@ class PubMedClient:
                     "sort": "pub_date",
                 }
             )
+            _LOGGER.debug(
+                "Requesting PubMed ESearch page at offset %d with size %d",
+                len(identifiers),
+                page_size,
+            )
             if len(term) > 400:
                 response = self._http.request("POST", _ESEARCH_URL, data=params)
             else:
@@ -193,6 +201,11 @@ class PubMedClient:
                         "use a narrower query or date range"
                     )
                 target = requested
+                _LOGGER.debug(
+                    "PubMed ESearch reported %d results; retrieving %d",
+                    total,
+                    target,
+                )
 
             page = result["ids"]
             identifiers.extend(page[: max(0, target - len(identifiers))])
@@ -202,6 +215,7 @@ class PubMedClient:
         return identifiers
 
     def _fetch_batch(self, identifiers: list[str]) -> list[Paper]:
+        _LOGGER.debug("Fetching a PubMed batch of %d records", len(identifiers))
         data = self._common_parameters()
         data.update(
             {

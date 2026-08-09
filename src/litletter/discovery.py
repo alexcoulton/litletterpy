@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from datetime import date
 from typing import Protocol
@@ -13,6 +14,8 @@ from litletter.query import (
     filter_papers,
     parse_query,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class _PubMedSource(Protocol):
@@ -67,34 +70,63 @@ def discover_papers(
     _validate_limit("max_biorxiv_candidates", max_biorxiv_candidates)
 
     parsed = parse_query(query) if isinstance(query, str) else query
+    source_names = [
+        name
+        for name, client in (("PubMed", pubmed), ("bioRxiv", biorxiv))
+        if client is not None
+    ]
+    _LOGGER.info(
+        "Discovering papers from %s through %s using %s",
+        since,
+        until,
+        " and ".join(source_names),
+    )
+    _LOGGER.debug("Litletter query: %s", " ".join(parsed.text.split()))
     matches: list[Paper] = []
 
     if pubmed is not None:
         selector = compile_pubmed_candidate_query(parsed)
         if selector is None:
+            _LOGGER.info("PubMed has no safe positive selector; fetching by date only")
             candidates = pubmed.fetch(
                 since=since,
                 until=until,
                 max_results=max_pubmed_candidates,
             )
         else:
+            _LOGGER.info("Fetching PubMed candidates with selector: %s", selector)
             candidates = pubmed.search(
                 selector,
                 since=since,
                 until=until,
                 max_results=max_pubmed_candidates,
             )
-        matches.extend(filter_papers(candidates, parsed))
+        source_matches = filter_papers(candidates, parsed)
+        _LOGGER.info(
+            "PubMed fetched %d candidates; %d matched locally",
+            len(candidates),
+            len(source_matches),
+        )
+        matches.extend(source_matches)
 
     if biorxiv is not None:
+        _LOGGER.info("Fetching bioRxiv candidates by date")
         candidates = biorxiv.fetch(
             since=since,
             until=until,
             max_results=max_biorxiv_candidates,
         )
-        matches.extend(filter_papers(candidates, parsed))
+        source_matches = filter_papers(candidates, parsed)
+        _LOGGER.info(
+            "bioRxiv fetched %d candidates; %d matched locally",
+            len(candidates),
+            len(source_matches),
+        )
+        matches.extend(source_matches)
 
-    return _sort_papers(matches)
+    sorted_matches = _sort_papers(matches)
+    _LOGGER.info("Discovery complete: %d matching papers", len(sorted_matches))
+    return sorted_matches
 
 
 def _sort_papers(papers: Iterable[Paper]) -> list[Paper]:

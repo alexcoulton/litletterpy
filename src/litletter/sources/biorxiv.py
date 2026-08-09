@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import date
 from typing import Any
 
@@ -10,6 +11,8 @@ import httpx
 from litletter.errors import ResponseParseError
 from litletter.models import Author, Paper, PaperSource
 from litletter.sources._http import HttpRequester
+
+_LOGGER = logging.getLogger(__name__)
 
 _DETAIL_URL = "https://connect.biorxiv.org/api/detail"
 
@@ -63,9 +66,16 @@ class BioRxivClient:
         total: int | None = None
         papers: list[Paper] = []
         while total is None or cursor < total:
+            _LOGGER.debug("Requesting bioRxiv page at cursor %d", cursor)
             url = f"{_DETAIL_URL}/{since.isoformat()}/{until.isoformat()}/{cursor}"
             response = self._http.request("GET", url)
             page, page_total = _parse_biorxiv_response(response)
+            _LOGGER.debug(
+                "bioRxiv returned %d records at cursor %d of %d total",
+                len(page),
+                cursor,
+                page_total,
+            )
             if total is None:
                 total = page_total
             if not page:
