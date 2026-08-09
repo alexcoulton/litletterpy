@@ -103,3 +103,19 @@ candidate selection because doing so could exclude valid results. When no safe
 positive selector exists, PubMed records are fetched using only the requested
 Entrez date range. Candidate limits can be supplied for previews, but they are
 applied before local filtering and can therefore reduce the number of matches.
+
+## Interactive scratchpad
+
+[scripts/demo.py](scripts/demo.py) is a deliberately simple, block-oriented
+scratchpad for exploring Litletter from an existing interactive Python session.
+Set your NCBI contact email first:
+
+```console
+export LITLETTER_NCBI_EMAIL="you@example.com"
+```
+
+Open the script in your editor and send its blocks to IPython. The variables
+remain available for inspection, including `query`, `pubmed_candidate_query`,
+the source clients, and the final `papers` list. Edit `query_text`, the date
+range, and candidate limits directly in the first blocks. An optional NCBI API
+key can be supplied through `LITLETTER_NCBI_API_KEY`.
