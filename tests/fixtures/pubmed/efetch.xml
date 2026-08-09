@@ -10,6 +10,7 @@
       </DateRevised>
       <Article>
         <Journal>
+          <ISSN IssnType="Electronic">2049-3630</ISSN>
           <JournalIssue>
             <PubDate>
               <Year>2026</Year>
@@ -42,6 +43,12 @@
           <Day>08</Day>
         </ArticleDate>
       </Article>
+      <MedlineJournalInfo>
+        <Country>United States</Country>
+        <MedlineTA>J Useful Results</MedlineTA>
+        <NlmUniqueID>101234567</NlmUniqueID>
+        <ISSNLinking>2049-3622</ISSNLinking>
+      </MedlineJournalInfo>
     </MedlineCitation>
     <PubmedData>
       <ArticleIdList>

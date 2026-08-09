@@ -325,9 +325,18 @@ def _parse_pubmed_record(record: ET.Element) -> Paper:
                 doi = _text(identifier)
                 break
 
-    journal = _text(article.find("./Journal/Title")) or _text(
-        article.find("./Journal/ISOAbbreviation")
-    )
+    journal_title = _text(article.find("./Journal/Title"))
+    journal_abbreviation = _text(article.find("./Journal/ISOAbbreviation"))
+    journal = journal_title or journal_abbreviation
+    journal_nlm_id = _text(citation.find("./MedlineJournalInfo/NlmUniqueID"))
+    journal_issns: list[str] = []
+    for element in (
+        article.find("./Journal/ISSN"),
+        citation.find("./MedlineJournalInfo/ISSNLinking"),
+    ):
+        value = _text(element)
+        if value and value not in journal_issns:
+            journal_issns.append(value)
     return Paper(
         source=PaperSource.PUBMED,
         source_id=pmid,
@@ -339,6 +348,9 @@ def _parse_pubmed_record(record: ET.Element) -> Paper:
         doi=doi,
         url=f"https://pubmed.ncbi.nlm.nih.gov/{pmid}/",
         journal=journal,
+        journal_abbreviation=journal_abbreviation,
+        journal_nlm_id=journal_nlm_id,
+        journal_issns=tuple(journal_issns),
     )
 
 

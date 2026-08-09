@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
 
+from litletter.journals import get_journal_catalog, journal_matches
 from litletter.models import Paper
 from litletter.query._ast import And, Expression, Field, Not, Or, Query, Term
 from litletter.query._parser import parse_query
@@ -24,7 +25,7 @@ def evaluate(expression: Expression, paper: Paper) -> bool:
         title=_normalize(paper.title),
         abstract=_normalize(paper.abstract or ""),
     )
-    return _evaluate(expression, text)
+    return _evaluate(expression, text, paper)
 
 
 def filter_papers(papers: Iterable[Paper], query: Query | str) -> list[Paper]:
@@ -33,27 +34,39 @@ def filter_papers(papers: Iterable[Paper], query: Query | str) -> list[Paper]:
     return [paper for paper in papers if parsed.matches(paper)]
 
 
-def _evaluate(expression: Expression, text: _PaperText) -> bool:
+def _evaluate(expression: Expression, text: _PaperText, paper: Paper) -> bool:
     if isinstance(expression, Term):
+        if expression.field is Field.JOURNAL:
+            return journal_matches(paper, expression.text)
+        if expression.field is Field.JOURNAL_GROUP:
+            return get_journal_catalog().contains(expression.text, paper)
         return any(
             _contains(value, expression.text, phrase=expression.phrase)
-            for value in _field_values(expression.field, text)
+            for value in _field_values(expression.field, text, paper)
         )
     if isinstance(expression, Not):
-        return not _evaluate(expression.operand, text)
+        return not _evaluate(expression.operand, text, paper)
     if isinstance(expression, And):
-        return _evaluate(expression.left, text) and _evaluate(expression.right, text)
+        return _evaluate(expression.left, text, paper) and _evaluate(
+            expression.right, text, paper
+        )
     if isinstance(expression, Or):
-        return _evaluate(expression.left, text) or _evaluate(expression.right, text)
+        return _evaluate(expression.left, text, paper) or _evaluate(
+            expression.right, text, paper
+        )
     raise TypeError(f"unsupported query expression: {type(expression).__name__}")
 
 
-def _field_values(field: Field, text: _PaperText) -> tuple[str, ...]:
+def _field_values(field: Field, text: _PaperText, paper: Paper) -> tuple[str, ...]:
     if field is Field.TITLE:
         return (text.title,)
     if field is Field.ABSTRACT:
         return (text.abstract,)
-    return (text.title, text.abstract)
+    if field is Field.CATEGORY:
+        return (_normalize(paper.category or ""),)
+    if field is Field.TITLE_ABSTRACT:
+        return (text.title, text.abstract)
+    return ()
 
 
 def _contains(value: str, term: str, *, phrase: bool) -> bool:

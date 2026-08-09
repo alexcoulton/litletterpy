@@ -1,8 +1,9 @@
 # Litletter
 
 Litletter is a local Python package for fetching and normalizing papers from
-PubMed and bioRxiv. Boolean matching and newsletter delivery will be added in
-later milestones.
+PubMed and bioRxiv, then applying a shared Boolean query language to their
+titles, abstracts, journals, and categories. Newsletter delivery will be added
+in a later milestone.
 
 ## Development
 
@@ -62,13 +63,53 @@ The query language supports:
 - Case-insensitive `AND`, `OR`, and unary `NOT`.
 - Parentheses, with precedence `NOT`, then `AND`, then `OR`.
 - Quoted phrases, including `\"` and `\\` escapes.
-- `title:`, `abstract:`, and `title_abstract:` field prefixes.
+- `title:`, `abstract:`, `title_abstract:`, `journal:`, `journal_group:`, and
+  `category:` field prefixes.
 - Field-scoped groups such as `title:(cancer OR tumour)`.
 
 Unqualified terms search the title and abstract. Unquoted terms match complete
 words, while quoted phrases match a contiguous substring. Matching is Unicode
 case-insensitive and collapses runs of whitespace. Boolean operators must be
 explicit; Litletter does not insert an implicit `AND` between adjacent terms.
+
+### Journals and journal groups
+
+`journal:` performs exact, case-insensitive identity matching rather than a
+substring search. For PubMed records it can match the full journal title,
+abbreviation, NLM ID, or retained ISSN. A field-scoped group is useful for a
+short ad hoc list:
+
+```python
+query = parse_query("title_abstract:cancer AND journal:(Nature OR Science OR Cell)")
+```
+
+Litletter also ships versioned, sourced collections for publisher families and
+the Nature Index:
+
+```python
+from litletter import get_journal_catalog, parse_query
+
+catalog = get_journal_catalog()
+catalog.names()
+catalog.get("nature_portfolio").journals
+
+query = parse_query("title_abstract:cancer AND journal_group:nature_index_current")
+```
+
+The built-in canonical group names are `flagship_nsc`, `nature_research`,
+`nature_reviews`, `nature_communications`, `nature_progress`, `scientific_series`,
+`npj_series`, `nature_portfolio`, `science_family`, `cell_press`, and
+`nature_index_2026`. The aliases `nsc`, `nature_family`, `nature_index`, and
+`nature_index_current` are also accepted. Each group records its source URL and
+snapshot date so a newsletter query does not silently change when a publisher
+updates its list.
+
+The Nature Index group represents publication membership only. Nature Index
+also applies article-type rules when calculating its metrics; Litletter does
+not attempt to reproduce those rules.
+
+`category:` matches bioRxiv's supplied category locally, for example
+`category:"systems biology"`. PubMed records do not have that field.
 
 ## Discovering matching papers
 
@@ -103,6 +144,8 @@ candidate selection because doing so could exclude valid results. When no safe
 positive selector exists, PubMed records are fetched using only the requested
 Entrez date range. Candidate limits can be supplied for previews, but they are
 applied before local filtering and can therefore reduce the number of matches.
+Journal constraints compile to PubMed's `[Journal]` field; large groups are sent
+with POST automatically.
 
 ## Interactive scratchpad
 

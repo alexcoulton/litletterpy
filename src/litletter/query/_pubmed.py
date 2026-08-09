@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from litletter.journals import get_journal_catalog
 from litletter.query._ast import And, Expression, Field, Not, Or, Query, Term
 from litletter.query._parser import parse_query
 
@@ -50,6 +51,14 @@ def _compile(expression: Expression) -> str | None:
 
 
 def _compile_term(term: Term) -> str | None:
+    if term.field is Field.JOURNAL:
+        return _compile_journal(term.text)
+    if term.field is Field.JOURNAL_GROUP:
+        group = get_journal_catalog().get(term.text)
+        components = [_compile_journal(journal) for journal in group.journals]
+        return f"({' OR '.join(components)})"
+    if term.field is Field.CATEGORY:
+        return None
     tokens = _SEARCH_TOKEN.findall(term.text)
     if not tokens:
         return None
@@ -58,3 +67,8 @@ def _compile_term(term: Term) -> str | None:
     if len(components) == 1:
         return components[0]
     return f"({' AND '.join(components)})"
+
+
+def _compile_journal(value: str) -> str:
+    escaped = value.replace('"', "")
+    return f'"{escaped}"[Journal]'

@@ -16,6 +16,11 @@ def paper(
     *,
     source: PaperSource = PaperSource.PUBMED,
     source_id: str = "1",
+    journal: str | None = None,
+    category: str | None = None,
+    journal_abbreviation: str | None = None,
+    journal_nlm_id: str | None = None,
+    journal_issns: tuple[str, ...] = (),
 ) -> Paper:
     return Paper(
         source=source,
@@ -27,6 +32,11 @@ def paper(
         updated_at=None,
         doi=None,
         url=f"https://example.test/{source_id}",
+        journal=journal,
+        category=category,
+        journal_abbreviation=journal_abbreviation,
+        journal_nlm_id=journal_nlm_id,
+        journal_issns=journal_issns,
     )
 
 
@@ -90,6 +100,60 @@ def test_nested_field_prefix_overrides_group_scope() -> None:
     query = parse_query("title:(cancer OR abstract:oncology)")
 
     assert query.matches(paper("A neutral title", "An oncology experiment"))
+
+
+def test_journal_field_matches_exact_normalized_identity() -> None:
+    query = parse_query("journal:Nature")
+
+    assert query.matches(paper("Result", journal="Nature"))
+    assert not query.matches(paper("Result", journal="Nature Medicine"))
+
+
+@pytest.mark.parametrize(
+    "attributes",
+    [
+        {"journal_abbreviation": "NAT"},
+        {"journal_nlm_id": "0410462"},
+        {"journal_issns": ("1476-4687", "0028-0836")},
+    ],
+)
+def test_journal_field_accepts_retained_pubmed_identifiers(attributes: dict) -> None:
+    assert parse_query("journal:1476-4687 OR journal:NAT OR journal:0410462").matches(
+        paper("Result", journal="Nature", **attributes)
+    )
+
+
+def test_journal_field_scopes_boolean_groups() -> None:
+    query = parse_query("title_abstract:cancer AND journal:(Nature OR Science OR Cell)")
+
+    assert query.matches(paper("Cancer mechanisms", journal="Science"))
+    assert not query.matches(paper("Cancer mechanisms", journal="Cancer Cell"))
+    assert not query.matches(paper("Plant mechanisms", journal="Science"))
+
+
+def test_journal_group_field_uses_bundled_collections() -> None:
+    query = parse_query("journal_group:flagship_nsc")
+
+    assert query.matches(paper("Result", journal="Cell"))
+    assert not query.matches(paper("Result", journal="Cancer Cell"))
+    assert parse_query("journal_group:nature_family").matches(
+        paper("Result", journal="Nature Medicine")
+    )
+
+
+def test_category_field_matches_biorxiv_categories() -> None:
+    query = parse_query('category:"systems biology" AND title:cancer')
+
+    assert query.matches(
+        paper(
+            "Cancer model",
+            source=PaperSource.BIORXIV,
+            category="Systems Biology",
+        )
+    )
+    assert not query.matches(
+        paper("Cancer model", source=PaperSource.BIORXIV, category="genomics")
+    )
 
 
 def test_quoted_phrases_are_case_insensitive_and_whitespace_normalized() -> None:
@@ -160,7 +224,7 @@ def test_filter_papers_accepts_text_and_preserves_source_and_order() -> None:
         ("()", "expected a term"),
         ("(alpha OR beta", "expected ')'"),
         ("alpha)", "unexpected token"),
-        ("journal:cancer", "unknown field 'journal'"),
+        ("publisher:cancer", "unknown field 'publisher'"),
         ("title:", "expected a term"),
         ('""', "quoted phrase must not be empty"),
         ('"unterminated', "unterminated quoted phrase"),

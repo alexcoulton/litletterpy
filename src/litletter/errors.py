@@ -38,3 +38,19 @@ class QuerySyntaxError(LitletterError, ValueError):
         line_start = query.rfind("\n", 0, position) + 1
         self.column = position - line_start + 1
         super().__init__(f"{message} at line {self.line}, column {self.column}")
+
+
+class JournalCatalogError(LitletterError, ValueError):
+    """The bundled journal catalog is invalid."""
+
+
+class UnknownJournalGroupError(LitletterError, ValueError):
+    """A query refers to a journal group that is not defined."""
+
+    def __init__(self, name: str, available: tuple[str, ...] = ()) -> None:
+        self.name = name
+        self.available = available
+        detail = f"unknown journal group '{name}'"
+        if available:
+            detail += f"; available groups: {', '.join(available)}"
+        super().__init__(detail)

@@ -6,7 +6,7 @@ import logging
 import os
 from datetime import date, timedelta
 
-from litletter import discover_papers, parse_query
+from litletter import discover_papers, get_journal_catalog, parse_query
 from litletter.query import compile_pubmed_candidate_query
 from litletter.sources import BioRxivClient, PubMedClient
 
@@ -14,14 +14,23 @@ logging.basicConfig(format="%(levelname)s %(name)s: %(message)s")
 logging.getLogger("litletter").setLevel(logging.INFO)
 
 query_text = """
-title_abstract:("spatial transcriptomics" OR single-cell)
-AND NOT title:review
+title_abstract:cancer
+AND journal_group:flagship_nsc
 """.strip()
 
 until = date.today()
 since = until - timedelta(days=7)
 ncbi_email = os.environ["LITLETTER_NCBI_EMAIL"]
 ncbi_api_key = os.environ.get("LITLETTER_NCBI_API_KEY")
+
+
+# Inspect the bundled journal collections and one reproducible snapshot
+
+catalog = get_journal_catalog()
+catalog.names()
+
+flagship_journals = catalog.get("flagship_nsc")
+flagship_journals
 
 
 # Parse the Litletter query and inspect its AST and PubMed candidate selector
@@ -59,6 +68,7 @@ len(papers)
     (
         paper.source.value,
         paper.published_at,
+        paper.journal,
         paper.title,
         paper.doi,
     )

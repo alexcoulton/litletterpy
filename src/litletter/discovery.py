@@ -94,7 +94,14 @@ def discover_papers(
                 max_results=max_pubmed_candidates,
             )
         else:
-            _LOGGER.info("Fetching PubMed candidates with selector: %s", selector)
+            if len(selector) <= 240:
+                _LOGGER.info("Fetching PubMed candidates with selector: %s", selector)
+            else:
+                _LOGGER.info(
+                    "Fetching PubMed candidates with compiled selector (%d characters)",
+                    len(selector),
+                )
+                _LOGGER.debug("Full PubMed selector: %s", selector)
             candidates = pubmed.search(
                 selector,
                 since=since,

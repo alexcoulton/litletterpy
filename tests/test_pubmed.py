@@ -84,6 +84,9 @@ def test_search_paginates_and_normalizes_records(fixture_dir: Path) -> None:
     assert first.updated_at == date(2026, 8, 9)
     assert first.doi == "10.1000/useful.111"
     assert first.journal == "Journal of Useful Results"
+    assert first.journal_abbreviation == "J Useful Results"
+    assert first.journal_nlm_id == "101234567"
+    assert first.journal_issns == ("2049-3630", "2049-3622")
     assert first.url == "https://pubmed.ncbi.nlm.nih.gov/111/"
 
     second = papers[1]

@@ -92,6 +92,16 @@ class FakeBioRxiv:
         ("title:cancer OR NOT review", None),
         ("NOT review", None),
         ('"***"', None),
+        ("journal:Nature", '"Nature"[Journal]'),
+        (
+            "journal:(Nature OR Science OR Cell)",
+            '(("Nature"[Journal] OR "Science"[Journal]) OR "Cell"[Journal])',
+        ),
+        (
+            "journal_group:flagship_nsc",
+            '("Nature"[Journal] OR "Science"[Journal] OR "Cell"[Journal])',
+        ),
+        ("category:bioinformatics", None),
     ],
 )
 def test_compile_pubmed_candidate_query(query: str, expected: str | None) -> None:
@@ -177,6 +187,27 @@ def test_discovery_logs_source_progress(caplog: pytest.LogCaptureFixture) -> Non
         "bioRxiv fetched 0 candidates; 0 matched locally",
         "Discovery complete: 0 matching papers",
     ]
+
+
+def test_discovery_summarizes_large_journal_group_selector(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    today = date(2026, 8, 9)
+    caplog.set_level(logging.INFO, logger="litletter.discovery")
+
+    discover_papers(
+        "journal_group:nature_index",
+        since=today,
+        until=today,
+        pubmed=FakePubMed([]),
+    )
+
+    messages = [record.getMessage() for record in caplog.records]
+    selector_message = messages[1]
+    assert selector_message.startswith(
+        "Fetching PubMed candidates with compiled selector ("
+    )
+    assert selector_message.endswith(" characters)")
 
 
 def test_discovery_uses_date_only_pubmed_fetch_without_positive_selector() -> None:

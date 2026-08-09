@@ -14,6 +14,9 @@ class Field(StrEnum):
     TITLE = "title"
     ABSTRACT = "abstract"
     TITLE_ABSTRACT = "title_abstract"
+    JOURNAL = "journal"
+    JOURNAL_GROUP = "journal_group"
+    CATEGORY = "category"
 
 
 class Expression:

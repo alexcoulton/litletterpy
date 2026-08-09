@@ -42,6 +42,9 @@ class Paper:
     journal: str | None = None
     category: str | None = None
     version: int | None = None
+    journal_abbreviation: str | None = None
+    journal_nlm_id: str | None = None
+    journal_issns: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.source_id.strip():
