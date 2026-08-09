@@ -54,3 +54,23 @@ class UnknownJournalGroupError(LitletterError, ValueError):
         if available:
             detail += f"; available groups: {', '.join(available)}"
         super().__init__(detail)
+
+
+class ConfigurationError(LitletterError, ValueError):
+    """A Litletter JSON configuration is invalid."""
+
+
+class DatabaseError(LitletterError):
+    """Litletter's persistent state could not be read or updated."""
+
+
+class BootstrapRequiredError(LitletterError):
+    """An initial discovery window requires explicit user confirmation."""
+
+
+class DeliveryError(LitletterError):
+    """A newsletter could not be submitted to its email provider."""
+
+
+class DeliveryUncertainError(DeliveryError):
+    """Delivery may have occurred, so an automatic retry would be unsafe."""

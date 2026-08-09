@@ -1,0 +1,278 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from datetime import date
+from pathlib import Path
+
+import pytest
+
+from litletter.config import (
+    BioRxivConfig,
+    CategoryConfig,
+    DeliveryConfig,
+    DiscoveryConfig,
+    LitletterConfig,
+    NewsletterConfig,
+    PubMedConfig,
+)
+from litletter.delivery import DeliveryReceipt
+from litletter.errors import (
+    BootstrapRequiredError,
+    DatabaseError,
+    DeliveryUncertainError,
+)
+from litletter.models import Paper, PaperSource
+from litletter.newsletter import RenderedNewsletter
+from litletter.runner import calculate_window, run_once
+from litletter.storage import Database
+
+
+@dataclass
+class FakePubMed:
+    papers: list[Paper]
+    searches: list[tuple[str, date | None, date | None]] = field(default_factory=list)
+
+    def search(
+        self,
+        query: str,
+        *,
+        since: date | None = None,
+        until: date | None = None,
+        max_results: int | None = None,
+    ) -> list[Paper]:
+        self.searches.append((query, since, until))
+        return self.papers
+
+    def fetch(
+        self,
+        *,
+        since: date,
+        until: date,
+        max_results: int | None = None,
+    ) -> list[Paper]:
+        return self.papers
+
+
+@dataclass
+class FakeMailer:
+    newsletters: list[RenderedNewsletter] = field(default_factory=list)
+
+    def send(self, newsletter: RenderedNewsletter) -> DeliveryReceipt:
+        self.newsletters.append(newsletter)
+        return DeliveryReceipt(provider="postmark", message_id="message-1")
+
+
+class UncertainMailer:
+    def send(self, newsletter: RenderedNewsletter) -> DeliveryReceipt:
+        raise DeliveryUncertainError("request timed out after submission")
+
+
+def config(tmp_path: Path) -> LitletterConfig:
+    return LitletterConfig(
+        path=tmp_path / "litletter.json",
+        database=tmp_path / "litletter.sqlite3",
+        newsletter=NewsletterConfig(
+            title="My Litletter",
+            from_address="sender@example.com",
+            to=("reader@example.com",),
+            timezone="Europe/London",
+            abstract_max_characters=800,
+        ),
+        pubmed=PubMedConfig(True, "reader@example.com", None),
+        biorxiv=BioRxivConfig(False),
+        discovery=DiscoveryConfig(initial_lookback_days=30, overlap_days=2),
+        categories=(
+            CategoryConfig(
+                id="cancer",
+                name="Cancer",
+                query="title_abstract:cancer",
+                sources=(PaperSource.PUBMED,),
+            ),
+            CategoryConfig(
+                id="nature",
+                name="Nature",
+                query="title_abstract:cancer AND journal:Nature",
+                sources=(PaperSource.PUBMED,),
+            ),
+        ),
+        delivery=DeliveryConfig("postmark", "POSTMARK_TOKEN", "broadcasts"),
+    )
+
+
+def paper() -> Paper:
+    return Paper(
+        source=PaperSource.PUBMED,
+        source_id="123",
+        title="Cancer biology",
+        abstract="A result.",
+        authors=(),
+        published_at=date(2026, 8, 8),
+        updated_at=None,
+        doi="10.1000/example",
+        url="https://pubmed.ncbi.nlm.nih.gov/123/",
+        journal="Nature",
+    )
+
+
+def open_database(tmp_path: Path) -> Database:
+    database = Database(tmp_path / "litletter.sqlite3")
+    database.initialize()
+    return database
+
+
+def test_initial_window_requires_explicit_bootstrap(tmp_path: Path) -> None:
+    settings = config(tmp_path)
+    database = open_database(tmp_path)
+
+    with pytest.raises(BootstrapRequiredError):
+        calculate_window(settings, database, today=date(2026, 8, 9), bootstrap=False)
+
+    assert calculate_window(
+        settings, database, today=date(2026, 8, 9), bootstrap=True
+    ) == (date(2026, 7, 10), date(2026, 8, 9))
+    database.close()
+
+
+def test_run_sends_one_categorized_edition_and_deduplicates_future_runs(
+    tmp_path: Path,
+) -> None:
+    settings = config(tmp_path)
+    database = open_database(tmp_path)
+    pubmed = FakePubMed([paper()])
+    mailer = FakeMailer()
+
+    first = run_once(
+        settings,
+        database,
+        pubmed=pubmed,
+        biorxiv=None,
+        mailer=mailer,
+        today=date(2026, 8, 9),
+        bootstrap=True,
+    )
+
+    assert first.matched == 2
+    assert first.unsent == 1
+    assert len(mailer.newsletters) == 1
+    assert "Cancer" in mailer.newsletters[0].text
+    assert "Also in: Nature" in mailer.newsletters[0].text
+    assert database.status().submitted_editions == 1
+    assert database.unsent_papers() == []
+
+    second = run_once(
+        settings,
+        database,
+        pubmed=pubmed,
+        biorxiv=None,
+        mailer=mailer,
+        today=date(2026, 8, 10),
+    )
+
+    assert second.since == date(2026, 8, 7)
+    assert second.unsent == 0
+    assert len(mailer.newsletters) == 1
+    database.close()
+
+
+def test_dry_run_advances_discovery_but_does_not_create_edition(
+    tmp_path: Path,
+) -> None:
+    settings = config(tmp_path)
+    database = open_database(tmp_path)
+
+    result = run_once(
+        settings,
+        database,
+        pubmed=FakePubMed([paper()]),
+        biorxiv=None,
+        mailer=None,
+        today=date(2026, 8, 9),
+        bootstrap=True,
+        dry_run=True,
+    )
+
+    assert result.newsletter is not None
+    assert result.dry_run is True
+    assert database.open_edition() is None
+    assert len(database.unsent_papers()) == 1
+    assert database.last_successful_until() == date(2026, 8, 9)
+    database.close()
+
+
+def test_open_failed_edition_requires_explicit_retry(tmp_path: Path) -> None:
+    settings = config(tmp_path)
+    database = open_database(tmp_path)
+    mailer = FakeMailer()
+    run_once(
+        settings,
+        database,
+        pubmed=FakePubMed([paper()]),
+        biorxiv=None,
+        mailer=mailer,
+        today=date(2026, 8, 9),
+        bootstrap=True,
+    )
+    edition = database.connection.execute("SELECT id FROM editions").fetchone()[0]
+    database.connection.execute(
+        "UPDATE editions SET status = 'failed' WHERE id = ?", (edition,)
+    )
+    database.connection.commit()
+
+    with pytest.raises(DatabaseError, match="retry-open-edition"):
+        run_once(
+            settings,
+            database,
+            pubmed=FakePubMed([]),
+            biorxiv=None,
+            mailer=mailer,
+            today=date(2026, 8, 10),
+        )
+
+    retry_mailer = FakeMailer()
+    result = run_once(
+        settings,
+        database,
+        pubmed=FakePubMed([]),
+        biorxiv=None,
+        mailer=retry_mailer,
+        today=date(2026, 8, 10),
+        retry_open_edition=True,
+    )
+    assert result.message == "Existing edition submitted"
+    assert len(retry_mailer.newsletters) == 1
+    database.close()
+
+
+def test_uncertain_delivery_stops_future_runs_until_operator_resolution(
+    tmp_path: Path,
+) -> None:
+    settings = config(tmp_path)
+    database = open_database(tmp_path)
+
+    with pytest.raises(DeliveryUncertainError):
+        run_once(
+            settings,
+            database,
+            pubmed=FakePubMed([paper()]),
+            biorxiv=None,
+            mailer=UncertainMailer(),
+            today=date(2026, 8, 9),
+            bootstrap=True,
+        )
+
+    edition = database.open_edition()
+    assert edition is not None
+    assert edition.status == "sending"
+    with pytest.raises(DatabaseError, match="uncertain delivery state"):
+        run_once(
+            settings,
+            database,
+            pubmed=FakePubMed([]),
+            biorxiv=None,
+            mailer=FakeMailer(),
+            today=date(2026, 8, 10),
+        )
+
+    database.resolve_uncertain_delivery(edition.id, delivered=False)
+    assert database.open_edition().status == "failed"
+    database.close()

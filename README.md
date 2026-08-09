@@ -2,8 +2,9 @@
 
 Litletter is a local Python package for fetching and normalizing papers from
 PubMed and bioRxiv, then applying a shared Boolean query language to their
-titles, abstracts, journals, and categories. Newsletter delivery will be added
-in a later milestone.
+titles, abstracts, journals, and categories. Its CLI can run those searches on
+a schedule, retain delivery state in SQLite, and send a categorized email
+newsletter through Postmark without resending previously delivered papers.
 
 ## Development
 
@@ -16,6 +17,127 @@ uv run pytest
 uv run ruff check .
 uv run ruff format --check .
 ```
+
+Installing the project creates the `litletter` command inside `.venv/bin`.
+Either activate the environment or prefix commands with `uv run`.
+
+## Scheduled newsletters
+
+Start from [examples/litletter.json](examples/litletter.json). The configuration
+contains addressing, source credentials, discovery-window behavior, ordered
+search categories, and delivery settings. Paths such as `database` are resolved
+relative to the JSON file, not the shell's current directory.
+
+Each category has a stable lowercase ID, a display name, a Litletter Boolean
+query, and one or more sources. For example:
+
+```json
+{
+  "id": "nsc-cancer",
+  "name": "Nature, Science and Cell: Cancer",
+  "query": "title_abstract:cancer AND journal_group:flagship_nsc",
+  "sources": ["pubmed"]
+}
+```
+
+Category order controls the email section order. If a paper matches several
+categories, it appears once under the first matching category and lists the
+others as secondary categories.
+
+Copy and edit the example, then validate it and initialize its SQLite database:
+
+```console
+cp examples/litletter.json litletter.json
+uv run litletter config validate --config litletter.json
+uv run litletter db init --config litletter.json
+```
+
+The first date window must be approved explicitly. Previewing it is the safest
+bootstrap workflow:
+
+```console
+uv run litletter run --config litletter.json \
+  --bootstrap --dry-run --output /tmp/litletter-preview.html
+```
+
+That command fetches and stores matches and advances the discovery watermark,
+but does not create a delivery edition or mark any paper sent. Subsequent runs
+use an overlapping date window so delayed indexing does not create gaps. Global
+deduplication happens against successfully submitted editions, so overlap and
+papers matching multiple categories do not cause repeated email entries.
+
+### Postmark delivery
+
+Create a Postmark server, verify the individual address used by
+`newsletter.from`, and create a Broadcast Message Stream whose ID matches
+`delivery.message_stream`. Put its server token in the environment variable
+named by `delivery.token_env`:
+
+```console
+export LITLETTER_POSTMARK_TOKEN="your-server-token"
+uv run litletter run --config litletter.json
+```
+
+A verified individual sender signature is sufficient for this single-user
+setup; the sender and recipient can be the same address. A Broadcast stream is
+appropriate for newsletters and lets Postmark apply its broadcast/unsubscribe
+handling.
+
+Use `litletter status --config litletter.json` to inspect the watermark, pending
+papers, submitted editions, and any edition requiring attention. Provider
+requests are deliberately not retried automatically. A definite rejection
+leaves a failed edition that can be resent after correction:
+
+```console
+uv run litletter run --config litletter.json --retry-open-edition
+```
+
+If a timeout makes the outcome uncertain, the edition remains in `sending` and
+all future sends stop. Check Postmark using the edition metadata shown by
+`litletter status`, then resolve it explicitly:
+
+```console
+# The message exists in Postmark:
+uv run litletter edition resolve --config litletter.json EDITION_ID \
+  --delivered --message-id POSTMARK_MESSAGE_ID
+
+# Postmark confirms that it was not accepted:
+uv run litletter edition resolve --config litletter.json EDITION_ID \
+  --not-delivered
+uv run litletter run --config litletter.json --retry-open-edition
+```
+
+### Scheduling on a server
+
+One CLI invocation performs one finite run, which makes it suitable for cron or
+a systemd timer. It takes a non-blocking file lock next to the database, so an
+overlapping invocation exits instead of running concurrently.
+
+For cron, activate nothing; call the installed executable by its absolute path:
+
+```cron
+15 7 * * * cd /opt/litletter && /opt/litletter/.venv/bin/litletter run --config /etc/litletter/litletter.json
+```
+
+The sample [systemd service](deploy/litletter.service) and
+[timer](deploy/litletter.timer) are more resilient: the timer is persistent, so
+a run missed while the server was offline starts after it returns. Adapt the
+paths, copy the JSON to `/etc/litletter/litletter.json`, use
+`/var/lib/litletter/litletter.sqlite3` as its database, and store secrets in a
+root-owned environment file based on
+[deploy/litletter.env.example](deploy/litletter.env.example). Then install and
+enable the units:
+
+```console
+sudo cp deploy/litletter.service deploy/litletter.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now litletter.timer
+systemctl list-timers litletter.timer
+```
+
+SQLite is the only persistent service. It records papers, category memberships,
+run watermarks, immutable rendered editions, and delivery attempts. There is no
+database daemon to administer; back up the database file when no run is active.
 
 ## Fetching papers
 

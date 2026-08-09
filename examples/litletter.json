@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "database": "state/litletter.sqlite3",
+  "newsletter": {
+    "title": "My Litletter",
+    "from": "you@example.com",
+    "to": ["you@example.com"],
+    "timezone": "Europe/London",
+    "abstract_max_characters": 800
+  },
+  "sources": {
+    "pubmed": {
+      "enabled": true,
+      "email": "you@example.com",
+      "api_key_env": "LITLETTER_NCBI_API_KEY"
+    },
+    "biorxiv": {
+      "enabled": true
+    }
+  },
+  "discovery": {
+    "initial_lookback_days": 30,
+    "overlap_days": 2
+  },
+  "categories": [
+    {
+      "id": "nsc-cancer",
+      "name": "Nature, Science and Cell: Cancer",
+      "query": "title_abstract:cancer AND journal_group:flagship_nsc",
+      "sources": ["pubmed"]
+    },
+    {
+      "id": "cancer-preprints",
+      "name": "Cancer Preprints",
+      "query": "title_abstract:cancer",
+      "sources": ["biorxiv"]
+    }
+  ],
+  "delivery": {
+    "provider": "postmark",
+    "token_env": "LITLETTER_POSTMARK_TOKEN",
+    "message_stream": "broadcasts"
+  }
+}

@@ -12,6 +12,9 @@ dependencies = [
     "httpx>=0.27,<1",
 ]
 
+[project.scripts]
+litletter = "litletter.cli:main"
+
 [dependency-groups]
 dev = [
     "ipython>=9.16.1",

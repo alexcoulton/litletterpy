@@ -1,0 +1,17 @@
+[Unit]
+Description=Discover papers and send the Litletter newsletter
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=litletter
+Group=litletter
+WorkingDirectory=/opt/litletter
+EnvironmentFile=/etc/litletter/litletter.env
+ExecStart=/opt/litletter/.venv/bin/litletter run --config /etc/litletter/litletter.json
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/litletter
