@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import sqlite3
 from datetime import date
 from pathlib import Path
 
 from litletter.config import CategoryConfig
 from litletter.models import Author, Paper, PaperSource
 from litletter.storage import Database
+from litletter.summarization import PaperSummary, SummaryResult, paper_input_hash
 
 
 def category(
@@ -151,4 +153,63 @@ def test_operator_can_resolve_an_uncertain_delivery(tmp_path: Path) -> None:
     assert edition.status == "submitted"
     assert edition.message_id == "postmark-message"
     assert database.unsent_papers() == []
+    database.close()
+
+
+def test_database_caches_summaries_by_full_identity(tmp_path: Path) -> None:
+    database = Database(tmp_path / "litletter.sqlite3")
+    database.initialize()
+    database.sync_categories([category()])
+    run_id = database.start_run(date(2026, 8, 9), date(2026, 8, 9))
+    result_paper = paper()
+    database.save_matches("nsc-cancer", [result_paper], run_id=run_id)
+    input_hash = paper_input_hash(result_paper)
+    result = SummaryResult(
+        paper_summary=PaperSummary("A takeaway.", "An accessible summary."),
+        provider="deepseek:default",
+        model="deepseek-v4-flash",
+        prompt_hash="prompt-hash",
+        input_hash=input_hash,
+        input_tokens=100,
+        output_tokens=25,
+        provider_request_id="request-1",
+    )
+
+    database.save_summary(result_paper, result)
+
+    assert database.find_summary(
+        result_paper,
+        provider="deepseek:default",
+        model="deepseek-v4-flash",
+        prompt_hash="prompt-hash",
+        input_hash=input_hash,
+    ) == PaperSummary("A takeaway.", "An accessible summary.")
+    assert (
+        database.find_summary(
+            result_paper,
+            provider="deepseek:default",
+            model="different-model",
+            prompt_hash="prompt-hash",
+            input_hash=input_hash,
+        )
+        is None
+    )
+    assert database.status().cached_summaries == 1
+    database.close()
+
+
+def test_database_migrates_schema_one_to_summary_cache(tmp_path: Path) -> None:
+    path = tmp_path / "litletter.sqlite3"
+    database = Database(path)
+    database.initialize()
+    database.close()
+    with sqlite3.connect(path) as connection:
+        connection.execute("DROP TABLE paper_summaries")
+        connection.execute("PRAGMA user_version = 1")
+
+    database = Database(path)
+    database.initialize()
+
+    assert database.connection.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert database.status().cached_summaries == 0
     database.close()

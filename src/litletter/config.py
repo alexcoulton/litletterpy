@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from litletter.app_config import AppConfig
 from litletter.errors import ConfigurationError
 from litletter.models import PaperSource
 from litletter.query import parse_query
@@ -32,8 +33,7 @@ class PubMedConfig:
     """PubMed access settings."""
 
     enabled: bool
-    email: str
-    api_key_env: str | None
+    provider: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,8 +66,19 @@ class DeliveryConfig:
     """Postmark delivery settings."""
 
     provider: str
-    token_env: str
     message_stream: str
+
+
+@dataclass(frozen=True, slots=True)
+class SummarizationConfig:
+    """Optional provider-neutral paper summarization behavior."""
+
+    enabled: bool
+    provider: str | None
+    model: str
+    max_words: int
+    audience: str
+    failure_policy: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,6 +92,7 @@ class LitletterConfig:
     biorxiv: BioRxivConfig
     discovery: DiscoveryConfig
     categories: tuple[CategoryConfig, ...]
+    summarization: SummarizationConfig
     delivery: DeliveryConfig
 
 
@@ -111,12 +123,13 @@ def parse_config(payload: Any, *, path: Path) -> LitletterConfig:
             "sources",
             "discovery",
             "categories",
+            "summarization",
             "delivery",
         },
         "config",
     )
-    if root.get("version") != 1:
-        raise ConfigurationError("config.version must be 1")
+    if root.get("version") != 2:
+        raise ConfigurationError("config.version must be 2")
 
     raw_database = _string(root, "database", "config")
     database = Path(raw_database).expanduser()
@@ -128,6 +141,7 @@ def parse_config(payload: Any, *, path: Path) -> LitletterConfig:
     pubmed, biorxiv = _parse_sources(root.get("sources"))
     discovery = _parse_discovery(root.get("discovery"))
     categories = _parse_categories(root.get("categories"), pubmed, biorxiv)
+    summarization = _parse_summarization(root.get("summarization", {}))
     delivery = _parse_delivery(root.get("delivery"))
     return LitletterConfig(
         path=path,
@@ -137,8 +151,25 @@ def parse_config(payload: Any, *, path: Path) -> LitletterConfig:
         biorxiv=biorxiv,
         discovery=discovery,
         categories=categories,
+        summarization=summarization,
         delivery=delivery,
     )
+
+
+def validate_provider_references(
+    config: LitletterConfig,
+    app_config: AppConfig,
+    *,
+    include_summarizer: bool = True,
+    include_mailer: bool = True,
+) -> None:
+    """Ensure every enabled newsletter provider exists in the global config."""
+    if config.pubmed.enabled:
+        app_config.pubmed(config.pubmed.provider or "")
+    if include_summarizer and config.summarization.enabled:
+        app_config.summarizer(config.summarization.provider or "")
+    if include_mailer:
+        app_config.mailer(config.delivery.provider)
 
 
 def _parse_newsletter(value: Any) -> NewsletterConfig:
@@ -175,17 +206,16 @@ def _parse_sources(value: Any) -> tuple[PubMedConfig, BioRxivConfig]:
     _only_keys(raw, {"pubmed", "biorxiv"}, "sources")
 
     raw_pubmed = _object(raw.get("pubmed", {}), "sources.pubmed")
-    _only_keys(raw_pubmed, {"enabled", "email", "api_key_env"}, "sources.pubmed")
+    _only_keys(raw_pubmed, {"enabled", "provider"}, "sources.pubmed")
     pubmed_enabled = _boolean(raw_pubmed.get("enabled", True), "sources.pubmed.enabled")
-    email = raw_pubmed.get("email", "")
-    if not isinstance(email, str) or (pubmed_enabled and not email.strip()):
-        raise ConfigurationError("sources.pubmed.email must be a non-empty string")
-    api_key_env = raw_pubmed.get("api_key_env")
-    if api_key_env is not None and (
-        not isinstance(api_key_env, str) or not api_key_env.strip()
+    pubmed_provider = raw_pubmed.get("provider")
+    if pubmed_enabled:
+        pubmed_provider = _string(raw_pubmed, "provider", "sources.pubmed")
+    elif pubmed_provider is not None and (
+        not isinstance(pubmed_provider, str) or not pubmed_provider.strip()
     ):
         raise ConfigurationError(
-            "sources.pubmed.api_key_env must be a non-empty string or null"
+            "sources.pubmed.provider must be a non-empty string or null"
         )
 
     raw_biorxiv = _object(raw.get("biorxiv", {}), "sources.biorxiv")
@@ -194,7 +224,10 @@ def _parse_sources(value: Any) -> tuple[PubMedConfig, BioRxivConfig]:
         raw_biorxiv.get("enabled", True), "sources.biorxiv.enabled"
     )
     return (
-        PubMedConfig(pubmed_enabled, email.strip(), api_key_env),
+        PubMedConfig(
+            pubmed_enabled,
+            pubmed_provider.strip() if isinstance(pubmed_provider, str) else None,
+        ),
         BioRxivConfig(biorxiv_enabled),
     )
 
@@ -268,14 +301,52 @@ def _parse_categories(
 
 def _parse_delivery(value: Any) -> DeliveryConfig:
     raw = _object(value, "delivery")
-    _only_keys(raw, {"provider", "token_env", "message_stream"}, "delivery")
-    provider = _string(raw, "provider", "delivery")
-    if provider != "postmark":
-        raise ConfigurationError("delivery.provider must be 'postmark'")
+    _only_keys(raw, {"provider", "message_stream"}, "delivery")
     return DeliveryConfig(
-        provider=provider,
-        token_env=_string(raw, "token_env", "delivery"),
+        provider=_string(raw, "provider", "delivery"),
         message_stream=_string(raw, "message_stream", "delivery"),
+    )
+
+
+def _parse_summarization(value: Any) -> SummarizationConfig:
+    raw = _object(value, "summarization")
+    _only_keys(
+        raw,
+        {"enabled", "provider", "model", "max_words", "audience", "failure_policy"},
+        "summarization",
+    )
+    enabled = _boolean(raw.get("enabled", False), "summarization.enabled")
+    provider = raw.get("provider")
+    if enabled:
+        provider = _string(raw, "provider", "summarization")
+    elif provider is not None and (
+        not isinstance(provider, str) or not provider.strip()
+    ):
+        raise ConfigurationError(
+            "summarization.provider must be a non-empty string or null"
+        )
+    model = raw.get("model", "deepseek-v4-flash")
+    if not isinstance(model, str) or not model.strip():
+        raise ConfigurationError("summarization.model must be a non-empty string")
+    audience = raw.get(
+        "audience", "a scientifically literate reader outside the paper's specialty"
+    )
+    if not isinstance(audience, str) or not audience.strip():
+        raise ConfigurationError("summarization.audience must be a non-empty string")
+    failure_policy = raw.get("failure_policy", "fallback")
+    if failure_policy not in {"fallback", "abort"}:
+        raise ConfigurationError(
+            "summarization.failure_policy must be 'fallback' or 'abort'"
+        )
+    return SummarizationConfig(
+        enabled=enabled,
+        provider=provider.strip() if isinstance(provider, str) else None,
+        model=model.strip(),
+        max_words=_integer(
+            raw.get("max_words", 100), "summarization.max_words", minimum=20
+        ),
+        audience=audience.strip(),
+        failure_policy=failure_policy,
     )
 
 

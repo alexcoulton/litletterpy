@@ -23,10 +23,29 @@ Either activate the environment or prefix commands with `uv run`.
 
 ## Scheduled newsletters
 
-Start from [examples/litletter.json](examples/litletter.json). The configuration
-contains addressing, source credentials, discovery-window behavior, ordered
-search categories, and delivery settings. Paths such as `database` are resolved
-relative to the JSON file, not the shell's current directory.
+Litletter deliberately separates machine-level provider credentials from
+newsletter behavior. The global app config defaults to
+`~/.config/litletter/app.json` and defines reusable PubMed, summarizer, and
+mailer profiles. A newsletter config references those profiles and contains
+addressing, discovery behavior, ordered searches, and presentation settings.
+`LITLETTER_APP_CONFIG` can override the global location.
+
+Create a private global template and edit its email and credentials:
+
+```console
+uv run litletter app-config init
+uv run litletter app-config path
+uv run litletter app-config validate
+```
+
+Secrets can be stored directly as `api_key`/`server_token`, or indirectly as
+`api_key_env`/`server_token_env`. The generated file uses environment references
+and mode `0600`, keeping secrets outside the repository. See
+[examples/app.json](examples/app.json) for the complete structure.
+
+Start the newsletter from [examples/litletter.json](examples/litletter.json).
+Paths such as `database` are resolved relative to the newsletter JSON file, not
+the shell's current directory.
 
 Each category has a stable lowercase ID, a display name, a Litletter Boolean
 query, and one or more sources. For example:
@@ -66,12 +85,50 @@ use an overlapping date window so delayed indexing does not create gaps. Global
 deduplication happens against successfully submitted editions, so overlap and
 papers matching multiple categories do not cause repeated email entries.
 
+### Optional DeepSeek summaries
+
+When `summarization.enabled` is true, Litletter summarizes each unsent paper that
+has an abstract before rendering. The built-in DeepSeek adapter requests
+validated JSON containing a short takeaway and a plain-language summary. The
+newsletter labels generated text clearly and falls back to the original
+abstract when `failure_policy` is `fallback`.
+
+Enabling the feature sends each paper's title and public abstract to the
+selected DeepSeek profile. Use `failure_policy: "abort"` when every paper must
+be summarized before an edition can be created.
+
+Successful summaries are cached in SQLite using the paper text, provider,
+model, and prompt identity. Delivery retries never call the model again.
+Changing the model or prompt creates a new cache identity without destroying
+older summaries.
+
+The runner depends on a provider-neutral `Summarizer` interface; DeepSeek is an
+adapter rather than a dependency of discovery or rendering, so another provider
+can be added without changing the pipeline.
+
+Precompute pending summaries without discovering or sending anything:
+
+```console
+uv run litletter summarize --config litletter.json --pending
+```
+
+Disable summarization persistently with `"enabled": false`, or bypass it for one
+run while retaining the cache:
+
+```console
+uv run litletter run --config litletter.json --no-summarization
+```
+
+Dry runs can create cached summaries and therefore make billable DeepSeek API
+calls, but still never create or deliver an email edition. Papers without an
+abstract remain unsummarized rather than being guessed from the title.
+
 ### Postmark delivery
 
 Create a Postmark server, verify the individual address used by
 `newsletter.from`, and create a Broadcast Message Stream whose ID matches
-`delivery.message_stream`. Put its server token in the environment variable
-named by `delivery.token_env`:
+`delivery.message_stream`. Put its server token in the selected mailer profile
+or the environment variable referenced by that profile:
 
 ```console
 export LITLETTER_POSTMARK_TOKEN="your-server-token"
@@ -116,13 +173,13 @@ overlapping invocation exits instead of running concurrently.
 For cron, activate nothing; call the installed executable by its absolute path:
 
 ```cron
-15 7 * * * cd /opt/litletter && /opt/litletter/.venv/bin/litletter run --config /etc/litletter/litletter.json
+15 7 * * * cd /opt/litletter && /opt/litletter/.venv/bin/litletter run --config /etc/litletter/litletter.json --app-config /etc/litletter/app.json
 ```
 
 The sample [systemd service](deploy/litletter.service) and
 [timer](deploy/litletter.timer) are more resilient: the timer is persistent, so
 a run missed while the server was offline starts after it returns. Adapt the
-paths, copy the JSON to `/etc/litletter/litletter.json`, use
+paths, copy the two JSON files to `/etc/litletter/`, use
 `/var/lib/litletter/litletter.sqlite3` as its database, and store secrets in a
 root-owned environment file based on
 [deploy/litletter.env.example](deploy/litletter.env.example). Then install and
@@ -136,8 +193,10 @@ systemctl list-timers litletter.timer
 ```
 
 SQLite is the only persistent service. It records papers, category memberships,
-run watermarks, immutable rendered editions, and delivery attempts. There is no
-database daemon to administer; back up the database file when no run is active.
+cached summaries and token usage, run watermarks, immutable rendered editions,
+and delivery attempts. There is no database daemon to administer; back up the
+database file when no run is active. Running `litletter db init` also applies
+supported schema migrations to an existing database.
 
 ## Fetching papers
 

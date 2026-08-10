@@ -6,6 +6,7 @@ from litletter.config import CategoryConfig, NewsletterConfig
 from litletter.models import Author, Paper, PaperSource
 from litletter.newsletter import render_newsletter
 from litletter.storage import PendingPaper
+from litletter.summarization import PaperSummary
 
 
 def paper(source_id: str, title: str, *, abstract: str | None) -> Paper:
@@ -98,3 +99,37 @@ def test_edition_id_is_stable_for_same_content() -> None:
     )
 
     assert first == second
+
+
+def test_renderer_prefers_labelled_summary_over_original_abstract() -> None:
+    category = CategoryConfig(
+        id="cancer",
+        name="Cancer",
+        query="cancer",
+        sources=(PaperSource.PUBMED,),
+    )
+    config = NewsletterConfig(
+        title="Litletter",
+        from_address="sender@example.com",
+        to=("reader@example.com",),
+        timezone="UTC",
+        abstract_max_characters=800,
+    )
+    item = PendingPaper(
+        paper("1", "Result", abstract="Dense original abstract."),
+        "cancer",
+        ("cancer",),
+        PaperSummary(
+            takeaway="The treatment reduced tumour size.",
+            summary="The authors report a smaller tumour after treatment.",
+        ),
+    )
+
+    rendered = render_newsletter(
+        config, (category,), [item], edition_date=date(2026, 8, 10)
+    )
+
+    assert "Takeaway: The treatment reduced tumour size." in rendered.text
+    assert "AI-generated summary based on the abstract." in rendered.text
+    assert "Dense original abstract." not in rendered.text
+    assert "<strong>Takeaway:</strong>" in rendered.html

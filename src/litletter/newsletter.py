@@ -107,9 +107,20 @@ def _render_text(
             ]
             if secondary:
                 lines.append(f"Also in: {', '.join(secondary)}")
-            abstract = _excerpt(paper.abstract, config.abstract_max_characters)
-            if abstract:
-                lines.extend(("", abstract))
+            if item.summary is not None:
+                lines.extend(
+                    (
+                        "",
+                        f"Takeaway: {item.summary.takeaway}",
+                        "",
+                        item.summary.summary,
+                        "AI-generated summary based on the abstract.",
+                    )
+                )
+            else:
+                abstract = _excerpt(paper.abstract, config.abstract_max_characters)
+                if abstract:
+                    lines.extend(("", abstract))
             lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
@@ -161,7 +172,11 @@ def _paper_html(
 ) -> str:
     paper = item.paper
     authors = _authors(paper)
-    abstract = _excerpt(paper.abstract, abstract_max_characters)
+    abstract = (
+        None
+        if item.summary is not None
+        else _excerpt(paper.abstract, abstract_max_characters)
+    )
     secondary = [
         category_names[category_id]
         for category_id in item.category_ids
@@ -183,6 +198,15 @@ def _paper_html(
     if abstract:
         details.append(
             f'<p style="line-height:1.55;margin:14px 0 0">{escape(abstract)}</p>'
+        )
+    if item.summary is not None:
+        details.append(
+            '<p style="line-height:1.5;margin:14px 0 8px">'
+            f"<strong>Takeaway:</strong> {escape(item.summary.takeaway)}</p>"
+            '<p style="line-height:1.55;margin:0">'
+            f"{escape(item.summary.summary)}</p>"
+            '<div style="color:#78716c;font-size:11px;margin-top:8px">'
+            "AI-generated summary based on the abstract.</div>"
         )
     return (
         '<article style="background:#ffffff;border:1px solid #e7e5e4;'

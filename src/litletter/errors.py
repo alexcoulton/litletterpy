@@ -74,3 +74,19 @@ class DeliveryError(LitletterError):
 
 class DeliveryUncertainError(DeliveryError):
     """Delivery may have occurred, so an automatic retry would be unsafe."""
+
+
+class SummarizationError(LitletterError):
+    """A paper could not be summarized."""
+
+
+class SummarizationConfigurationError(SummarizationError):
+    """Summarization cannot proceed until configuration is corrected."""
+
+
+class SummarizationTemporaryError(SummarizationError):
+    """A transient summarization failure remained after bounded retries."""
+
+
+class SummarizationResponseError(SummarizationError):
+    """A summarizer returned unusable or unsafe structured output."""

@@ -12,8 +12,9 @@ from pathlib import Path
 from litletter.config import CategoryConfig
 from litletter.errors import DatabaseError
 from litletter.models import Author, Paper, PaperSource
+from litletter.summarization import PaperSummary, SummaryResult
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 _SCHEMA = """
 CREATE TABLE runs (
     id INTEGER PRIMARY KEY,
@@ -108,11 +109,59 @@ CREATE TABLE deliveries (
     FOREIGN KEY (edition_id) REFERENCES editions(id)
 );
 
+CREATE TABLE paper_summaries (
+    id INTEGER PRIMARY KEY,
+    paper_source TEXT NOT NULL,
+    paper_source_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    prompt_hash TEXT NOT NULL,
+    input_hash TEXT NOT NULL,
+    takeaway TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    provider_request_id TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (
+        paper_source, paper_source_id, provider, model, prompt_hash, input_hash
+    ),
+    FOREIGN KEY (paper_source, paper_source_id)
+        REFERENCES papers(source, source_id) ON DELETE CASCADE
+);
+
 CREATE INDEX idx_runs_status ON runs(status, until_date);
 CREATE INDEX idx_paper_categories_category ON paper_categories(category_id);
 CREATE INDEX idx_editions_status ON editions(status, created_at);
 CREATE INDEX idx_edition_items_paper
     ON edition_items(paper_source, paper_source_id);
+CREATE INDEX idx_paper_summaries_paper
+    ON paper_summaries(paper_source, paper_source_id);
+"""
+
+_MIGRATION_1_TO_2 = """
+CREATE TABLE paper_summaries (
+    id INTEGER PRIMARY KEY,
+    paper_source TEXT NOT NULL,
+    paper_source_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    model TEXT NOT NULL,
+    prompt_hash TEXT NOT NULL,
+    input_hash TEXT NOT NULL,
+    takeaway TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    provider_request_id TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (
+        paper_source, paper_source_id, provider, model, prompt_hash, input_hash
+    ),
+    FOREIGN KEY (paper_source, paper_source_id)
+        REFERENCES papers(source, source_id) ON DELETE CASCADE
+);
+CREATE INDEX idx_paper_summaries_paper
+    ON paper_summaries(paper_source, paper_source_id);
 """
 
 
@@ -123,6 +172,7 @@ class PendingPaper:
     paper: Paper
     primary_category_id: str
     category_ids: tuple[str, ...]
+    summary: PaperSummary | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -149,6 +199,7 @@ class DatabaseStatus:
     category_matches: int
     submitted_editions: int
     unsent_papers: int
+    cached_summaries: int
     last_successful_until: date | None
     open_edition: StoredEdition | None
 
@@ -193,6 +244,13 @@ class Database:
                     self.connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             except sqlite3.Error as exc:
                 raise DatabaseError(f"could not initialize database: {exc}") from exc
+        elif version == 1:
+            try:
+                with self.connection:
+                    self.connection.executescript(_MIGRATION_1_TO_2)
+                    self.connection.execute("PRAGMA user_version = 2")
+            except sqlite3.Error as exc:
+                raise DatabaseError(f"could not migrate database: {exc}") from exc
         elif version != _SCHEMA_VERSION:
             raise DatabaseError(
                 f"unsupported database schema {version}; expected {_SCHEMA_VERSION}"
@@ -408,6 +466,70 @@ class Database:
             raise DatabaseError("edition disappeared after creation")
         return edition
 
+    def find_summary(
+        self,
+        paper: Paper,
+        *,
+        provider: str,
+        model: str,
+        prompt_hash: str,
+        input_hash: str,
+    ) -> PaperSummary | None:
+        """Return the exact cached summary identity, if present."""
+        row = self.connection.execute(
+            """
+            SELECT takeaway, summary FROM paper_summaries
+            WHERE paper_source = ? AND paper_source_id = ?
+              AND provider = ? AND model = ?
+              AND prompt_hash = ? AND input_hash = ?
+            """,
+            (
+                paper.source.value,
+                paper.source_id,
+                provider,
+                model,
+                prompt_hash,
+                input_hash,
+            ),
+        ).fetchone()
+        return PaperSummary(str(row[0]), str(row[1])) if row else None
+
+    def save_summary(self, paper: Paper, result: SummaryResult) -> None:
+        """Persist one successfully validated summary and its token usage."""
+        with self.connection:
+            self.connection.execute(
+                """
+                INSERT INTO paper_summaries (
+                    paper_source, paper_source_id, provider, model,
+                    prompt_hash, input_hash, takeaway, summary,
+                    input_tokens, output_tokens, provider_request_id, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (
+                    paper_source, paper_source_id, provider, model,
+                    prompt_hash, input_hash
+                ) DO UPDATE SET
+                    takeaway = excluded.takeaway,
+                    summary = excluded.summary,
+                    input_tokens = excluded.input_tokens,
+                    output_tokens = excluded.output_tokens,
+                    provider_request_id = excluded.provider_request_id
+                """,
+                (
+                    paper.source.value,
+                    paper.source_id,
+                    result.provider,
+                    result.model,
+                    result.prompt_hash,
+                    result.input_hash,
+                    result.paper_summary.takeaway,
+                    result.paper_summary.summary,
+                    result.input_tokens,
+                    result.output_tokens,
+                    result.provider_request_id,
+                    _timestamp(),
+                ),
+            )
+
     def open_edition(self) -> StoredEdition | None:
         """Return an edition requiring attention before another can be created."""
         row = self.connection.execute(
@@ -587,6 +709,7 @@ class Database:
             category_matches=matches,
             submitted_editions=submitted,
             unsent_papers=len(self.unsent_papers()),
+            cached_summaries=_count(self.connection, "paper_summaries"),
             last_successful_until=self.last_successful_until(),
             open_edition=self.open_edition(),
         )

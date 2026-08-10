@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from pathlib import Path
 
@@ -14,6 +14,7 @@ from litletter.config import (
     LitletterConfig,
     NewsletterConfig,
     PubMedConfig,
+    SummarizationConfig,
 )
 from litletter.delivery import DeliveryReceipt
 from litletter.errors import (
@@ -25,6 +26,11 @@ from litletter.models import Paper, PaperSource
 from litletter.newsletter import RenderedNewsletter
 from litletter.runner import calculate_window, run_once
 from litletter.storage import Database
+from litletter.summarization import (
+    PaperSummary,
+    SummaryResult,
+    paper_input_hash,
+)
 
 
 @dataclass
@@ -67,6 +73,30 @@ class UncertainMailer:
         raise DeliveryUncertainError("request timed out after submission")
 
 
+@dataclass
+class FakeSummarizer:
+    provider: str = "deepseek:test"
+    model: str = "deepseek-v4-flash"
+    prompt_hash: str = "prompt-v1"
+    calls: list[str] = field(default_factory=list)
+
+    def summarize(self, value: Paper) -> SummaryResult:
+        self.calls.append(value.source_id)
+        return SummaryResult(
+            paper_summary=PaperSummary(
+                "The study reports a cancer result.",
+                "The authors studied cancer biology and report a result.",
+            ),
+            provider=self.provider,
+            model=self.model,
+            prompt_hash=self.prompt_hash,
+            input_hash=paper_input_hash(value),
+            input_tokens=100,
+            output_tokens=20,
+            provider_request_id="request-1",
+        )
+
+
 def config(tmp_path: Path) -> LitletterConfig:
     return LitletterConfig(
         path=tmp_path / "litletter.json",
@@ -78,7 +108,7 @@ def config(tmp_path: Path) -> LitletterConfig:
             timezone="Europe/London",
             abstract_max_characters=800,
         ),
-        pubmed=PubMedConfig(True, "reader@example.com", None),
+        pubmed=PubMedConfig(True, "pubmed-default"),
         biorxiv=BioRxivConfig(False),
         discovery=DiscoveryConfig(initial_lookback_days=30, overlap_days=2),
         categories=(
@@ -95,7 +125,15 @@ def config(tmp_path: Path) -> LitletterConfig:
                 sources=(PaperSource.PUBMED,),
             ),
         ),
-        delivery=DeliveryConfig("postmark", "POSTMARK_TOKEN", "broadcasts"),
+        summarization=SummarizationConfig(
+            enabled=False,
+            provider=None,
+            model="deepseek-v4-flash",
+            max_words=100,
+            audience="scientists",
+            failure_policy="fallback",
+        ),
+        delivery=DeliveryConfig("postmark-default", "broadcasts"),
     )
 
 
@@ -275,4 +313,52 @@ def test_uncertain_delivery_stops_future_runs_until_operator_resolution(
 
     database.resolve_uncertain_delivery(edition.id, delivered=False)
     assert database.open_edition().status == "failed"
+    database.close()
+
+
+def test_run_creates_and_reuses_cached_summaries(tmp_path: Path) -> None:
+    settings = config(tmp_path)
+    settings = replace(
+        settings,
+        summarization=replace(
+            settings.summarization,
+            enabled=True,
+            provider="deepseek-default",
+        ),
+    )
+    database = open_database(tmp_path)
+    first_summarizer = FakeSummarizer()
+
+    first = run_once(
+        settings,
+        database,
+        pubmed=FakePubMed([paper()]),
+        biorxiv=None,
+        mailer=None,
+        summarizer=first_summarizer,
+        today=date(2026, 8, 9),
+        bootstrap=True,
+        dry_run=True,
+    )
+
+    assert first.summaries_created == 1
+    assert first.summaries_cached == 0
+    assert first_summarizer.calls == ["123"]
+    assert "Takeaway:" in first.newsletter.text
+
+    second_summarizer = FakeSummarizer()
+    second = run_once(
+        settings,
+        database,
+        pubmed=FakePubMed([paper()]),
+        biorxiv=None,
+        mailer=None,
+        summarizer=second_summarizer,
+        today=date(2026, 8, 10),
+        dry_run=True,
+    )
+
+    assert second.summaries_created == 0
+    assert second.summaries_cached == 1
+    assert second_summarizer.calls == []
     database.close()

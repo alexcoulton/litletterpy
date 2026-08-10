@@ -11,7 +11,7 @@ from litletter.models import PaperSource
 
 def config_payload() -> dict:
     return {
-        "version": 1,
+        "version": 2,
         "database": "state/litletter.sqlite3",
         "newsletter": {
             "title": "My Litletter",
@@ -22,8 +22,7 @@ def config_payload() -> dict:
         "sources": {
             "pubmed": {
                 "enabled": True,
-                "email": "reader@example.com",
-                "api_key_env": "NCBI_API_KEY",
+                "provider": "pubmed-default",
             },
             "biorxiv": {"enabled": True},
         },
@@ -36,9 +35,9 @@ def config_payload() -> dict:
                 "sources": ["pubmed"],
             }
         ],
+        "summarization": {"enabled": False},
         "delivery": {
-            "provider": "postmark",
-            "token_env": "POSTMARK_TOKEN",
+            "provider": "postmark-default",
             "message_stream": "broadcasts",
         },
     }
@@ -51,6 +50,8 @@ def test_parse_config_validates_and_resolves_paths(tmp_path: Path) -> None:
 
     assert config.database == tmp_path / "state" / "litletter.sqlite3"
     assert config.newsletter.abstract_max_characters == 800
+    assert config.pubmed.provider == "pubmed-default"
+    assert config.summarization.enabled is False
     assert config.categories[0].id == "nsc-cancer"
     assert config.categories[0].sources == (PaperSource.PUBMED,)
 
@@ -58,7 +59,7 @@ def test_parse_config_validates_and_resolves_paths(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("mutate", "message"),
     [
-        (lambda value: value.update(version=2), "version must be 1"),
+        (lambda value: value.update(version=1), "version must be 2"),
         (
             lambda value: value["categories"][0].update(id="NSC Cancer"),
             "id must contain lowercase",

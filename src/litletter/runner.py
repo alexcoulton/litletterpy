@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from typing import Protocol
 
@@ -16,11 +16,15 @@ from litletter.errors import (
     DatabaseError,
     DeliveryError,
     DeliveryUncertainError,
+    SummarizationConfigurationError,
+    SummarizationError,
+    SummarizationResponseError,
 )
 from litletter.models import Paper, PaperSource
 from litletter.newsletter import RenderedNewsletter, render_newsletter
 from litletter.query import filter_papers, parse_query
-from litletter.storage import Database, StoredEdition
+from litletter.storage import Database, PendingPaper, StoredEdition
+from litletter.summarization import Summarizer, paper_input_hash
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -62,10 +66,23 @@ class RunResult:
     until: date | None
     matched: int
     unsent: int
+    summaries_created: int
+    summaries_cached: int
+    summary_failures: int
     newsletter: RenderedNewsletter | None
     receipt: DeliveryReceipt | None
     dry_run: bool
     message: str
+
+
+@dataclass(frozen=True, slots=True)
+class SummaryStats:
+    """Summary enrichment counts for one invocation."""
+
+    created: int = 0
+    cached: int = 0
+    failed: int = 0
+    no_abstract: int = 0
 
 
 def calculate_window(
@@ -96,6 +113,7 @@ def run_once(
     pubmed: PubMedSource | None,
     biorxiv: BioRxivSource | None,
     mailer: Mailer | None,
+    summarizer: Summarizer | None = None,
     today: date,
     bootstrap: bool = False,
     dry_run: bool = False,
@@ -134,15 +152,25 @@ def run_once(
             database.finish_run(run_id)
             run_finished = True
             return RunResult(
-                since,
-                until,
-                matched,
-                0,
-                None,
-                None,
-                dry_run,
-                "No unsent matching papers",
+                since=since,
+                until=until,
+                matched=matched,
+                unsent=0,
+                summaries_created=0,
+                summaries_cached=0,
+                summary_failures=0,
+                newsletter=None,
+                receipt=None,
+                dry_run=dry_run,
+                message="No unsent matching papers",
             )
+
+        items, summary_stats = enrich_pending_papers(
+            database,
+            items,
+            summarizer=summarizer,
+            failure_policy=config.summarization.failure_policy,
+        )
 
         newsletter = render_newsletter(
             config.newsletter,
@@ -154,14 +182,17 @@ def run_once(
             database.finish_run(run_id)
             run_finished = True
             return RunResult(
-                since,
-                until,
-                matched,
-                len(items),
-                newsletter,
-                None,
-                True,
-                "Dry run rendered without creating an edition",
+                since=since,
+                until=until,
+                matched=matched,
+                unsent=len(items),
+                summaries_created=summary_stats.created,
+                summaries_cached=summary_stats.cached,
+                summary_failures=summary_stats.failed,
+                newsletter=newsletter,
+                receipt=None,
+                dry_run=True,
+                message="Dry run rendered without creating an edition",
             )
         if mailer is None:
             raise DeliveryError("a mailer is required unless --dry-run is used")
@@ -176,14 +207,17 @@ def run_once(
         database.finish_run(run_id)
         run_finished = True
         return RunResult(
-            since,
-            until,
-            matched,
-            len(items),
-            newsletter,
-            receipt,
-            False,
-            "Newsletter submitted",
+            since=since,
+            until=until,
+            matched=matched,
+            unsent=len(items),
+            summaries_created=summary_stats.created,
+            summaries_cached=summary_stats.cached,
+            summary_failures=summary_stats.failed,
+            newsletter=newsletter,
+            receipt=receipt,
+            dry_run=False,
+            message="Newsletter submitted",
         )
     except Exception as exc:
         if not run_finished:
@@ -243,6 +277,67 @@ def discover_categories(
     return total
 
 
+def enrich_pending_papers(
+    database: Database,
+    items: list[PendingPaper],
+    *,
+    summarizer: Summarizer | None,
+    failure_policy: str,
+) -> tuple[list[PendingPaper], SummaryStats]:
+    """Attach exact cached or newly generated summaries to pending papers."""
+    if summarizer is None:
+        return items, SummaryStats()
+    enriched: list[PendingPaper] = []
+    created = cached = failed = no_abstract = 0
+    for item in items:
+        paper = item.paper
+        if not paper.abstract or not paper.abstract.strip():
+            no_abstract += 1
+            enriched.append(item)
+            continue
+        input_hash = paper_input_hash(paper)
+        summary = database.find_summary(
+            paper,
+            provider=summarizer.provider,
+            model=summarizer.model,
+            prompt_hash=summarizer.prompt_hash,
+            input_hash=input_hash,
+        )
+        if summary is not None:
+            cached += 1
+            enriched.append(replace(item, summary=summary))
+            continue
+        try:
+            result = summarizer.summarize(paper)
+            if (
+                result.provider != summarizer.provider
+                or result.model != summarizer.model
+                or result.prompt_hash != summarizer.prompt_hash
+                or result.input_hash != input_hash
+            ):
+                raise SummarizationResponseError(
+                    "summarizer returned a result with a mismatched cache identity"
+                )
+        except SummarizationConfigurationError:
+            raise
+        except SummarizationError as exc:
+            if failure_policy == "abort":
+                raise
+            failed += 1
+            _LOGGER.warning(
+                "Summary failed for %s:%s; using abstract: %s",
+                paper.source.value,
+                paper.source_id,
+                exc,
+            )
+            enriched.append(item)
+            continue
+        database.save_summary(paper, result)
+        created += 1
+        enriched.append(replace(item, summary=result.paper_summary))
+    return enriched, SummaryStats(created, cached, failed, no_abstract)
+
+
 def _handle_open_edition(
     edition: StoredEdition,
     database: Database,
@@ -254,14 +349,17 @@ def _handle_open_edition(
     newsletter = _newsletter_from_edition(edition)
     if dry_run:
         return RunResult(
-            None,
-            None,
-            0,
-            edition.item_count,
-            newsletter,
-            None,
-            True,
-            f"Previewing existing {edition.status} edition {edition.id}",
+            since=None,
+            until=None,
+            matched=0,
+            unsent=edition.item_count,
+            summaries_created=0,
+            summaries_cached=0,
+            summary_failures=0,
+            newsletter=newsletter,
+            receipt=None,
+            dry_run=True,
+            message=f"Previewing existing {edition.status} edition {edition.id}",
         )
     if edition.status == "sending":
         raise DatabaseError(
@@ -277,14 +375,17 @@ def _handle_open_edition(
         raise DeliveryError("a mailer is required to retry an edition")
     receipt = _deliver(database, edition, newsletter, mailer)
     return RunResult(
-        None,
-        None,
-        0,
-        edition.item_count,
-        newsletter,
-        receipt,
-        False,
-        "Existing edition submitted",
+        since=None,
+        until=None,
+        matched=0,
+        unsent=edition.item_count,
+        summaries_created=0,
+        summaries_cached=0,
+        summary_failures=0,
+        newsletter=newsletter,
+        receipt=receipt,
+        dry_run=False,
+        message="Existing edition submitted",
     )
 
 

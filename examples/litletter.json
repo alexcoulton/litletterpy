@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "database": "state/litletter.sqlite3",
   "newsletter": {
     "title": "My Litletter",
@@ -11,8 +11,7 @@
   "sources": {
     "pubmed": {
       "enabled": true,
-      "email": "you@example.com",
-      "api_key_env": "LITLETTER_NCBI_API_KEY"
+      "provider": "pubmed-default"
     },
     "biorxiv": {
       "enabled": true
@@ -36,9 +35,16 @@
       "sources": ["biorxiv"]
     }
   ],
+  "summarization": {
+    "enabled": true,
+    "provider": "deepseek-default",
+    "model": "deepseek-v4-flash",
+    "max_words": 100,
+    "audience": "a scientifically literate reader outside the paper's specialty",
+    "failure_policy": "fallback"
+  },
   "delivery": {
-    "provider": "postmark",
-    "token_env": "LITLETTER_POSTMARK_TOKEN",
+    "provider": "postmark-default",
     "message_stream": "broadcasts"
   }
 }

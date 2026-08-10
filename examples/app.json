@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "providers": {
+    "paper_sources": {
+      "pubmed-default": {
+        "type": "pubmed",
+        "email": "you@example.com",
+        "api_key_env": "LITLETTER_NCBI_API_KEY"
+      }
+    },
+    "summarizers": {
+      "deepseek-default": {
+        "type": "deepseek",
+        "api_key_env": "LITLETTER_DEEPSEEK_API_KEY",
+        "base_url": "https://api.deepseek.com",
+        "timeout_seconds": 60
+      }
+    },
+    "mailers": {
+      "postmark-default": {
+        "type": "postmark",
+        "server_token_env": "LITLETTER_POSTMARK_TOKEN"
+      }
+    }
+  }
+}

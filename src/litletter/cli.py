@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import json
 import logging
 import os
 import sys
@@ -13,13 +14,24 @@ from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from litletter.config import LitletterConfig, load_config
+from litletter.app_config import (
+    AppConfig,
+    app_config_template,
+    default_app_config_path,
+    load_app_config,
+)
+from litletter.config import (
+    LitletterConfig,
+    load_config,
+    validate_provider_references,
+)
 from litletter.delivery import PostmarkMailer
 from litletter.errors import ConfigurationError, DatabaseError, LitletterError
 from litletter.models import PaperSource
-from litletter.runner import RunResult, run_once
+from litletter.runner import RunResult, enrich_pending_papers, run_once
 from litletter.sources import BioRxivClient, PubMedClient
 from litletter.storage import Database
+from litletter.summarization import DeepSeekSummarizer
 
 _LOGGER = logging.getLogger(__name__)
 _DEFAULT_CONFIG = "litletter.json"
@@ -47,6 +59,18 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Discover papers and send a categorized literature newsletter.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
+
+    app_command = commands.add_parser("app-config", help="global provider config")
+    app_commands = app_command.add_subparsers(required=True)
+    app_init = app_commands.add_parser("init", help="create a global config template")
+    _add_app_config_argument(app_init)
+    app_init.set_defaults(handler=_initialize_app_config)
+    app_validate = app_commands.add_parser("validate", help="validate global config")
+    _add_app_config_argument(app_validate)
+    app_validate.set_defaults(handler=_validate_app_config)
+    app_path = app_commands.add_parser("path", help="print the global config path")
+    _add_app_config_argument(app_path)
+    app_path.set_defaults(handler=_show_app_config_path)
 
     config_command = commands.add_parser("config", help="configuration commands")
     config_commands = config_command.add_subparsers(required=True)
@@ -78,6 +102,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="retry a failed/draft edition after confirming it was not delivered",
     )
     run.add_argument(
+        "--no-summarization",
+        action="store_true",
+        help="render this run with original abstracts even when configured",
+    )
+    run.add_argument(
         "--output",
         type=Path,
         help="write the rendered HTML preview to this path",
@@ -93,6 +122,18 @@ def _build_parser() -> argparse.ArgumentParser:
     status = commands.add_parser("status", help="show durable newsletter state")
     _add_config_argument(status)
     status.set_defaults(handler=_status)
+
+    summarize = commands.add_parser(
+        "summarize", help="precompute summaries without discovery or delivery"
+    )
+    _add_config_argument(summarize)
+    summarize.add_argument(
+        "--pending", action="store_true", required=True, help="summarize unsent papers"
+    )
+    summarize.add_argument(
+        "--verbose", action="store_true", help="enable debug logging"
+    )
+    summarize.set_defaults(handler=_summarize)
 
     edition = commands.add_parser("edition", help="edition recovery commands")
     edition_commands = edition.add_subparsers(required=True)
@@ -126,18 +167,87 @@ def _add_config_argument(parser: argparse.ArgumentParser) -> None:
         default=Path(os.environ.get("LITLETTER_CONFIG", _DEFAULT_CONFIG)),
         help="JSON configuration path (default: LITLETTER_CONFIG or litletter.json)",
     )
+    _add_app_config_argument(parser)
+
+
+def _add_app_config_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--app-config",
+        type=Path,
+        default=default_app_config_path(),
+        help="global provider config (default: LITLETTER_APP_CONFIG or XDG path)",
+    )
+
+
+def _load_configs(
+    args: argparse.Namespace,
+    *,
+    include_summarizer: bool = True,
+    include_mailer: bool = True,
+) -> tuple[LitletterConfig, AppConfig]:
+    config = load_config(args.config)
+    app_config = load_app_config(args.app_config)
+    validate_provider_references(
+        config,
+        app_config,
+        include_summarizer=include_summarizer,
+        include_mailer=include_mailer,
+    )
+    return config, app_config
+
+
+def _initialize_app_config(args: argparse.Namespace) -> int:
+    path = args.app_config.expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(app_config_template(), handle, indent=2)
+            handle.write("\n")
+    except FileExistsError as exc:
+        raise ConfigurationError(f"app config already exists: {path}") from exc
+    print(f"App config created with mode 0600: {path}")
+    return 0
+
+
+def _validate_app_config(args: argparse.Namespace) -> int:
+    app_config = load_app_config(args.app_config)
+    print(f"App configuration is valid: {app_config.path}")
+    print(f"Paper source profiles: {len(app_config.paper_sources)}")
+    print(f"Summarizer profiles: {len(app_config.summarizers)}")
+    print(f"Mailer profiles: {len(app_config.mailers)}")
+    for profile in app_config.paper_sources:
+        status = (
+            profile.api_key.availability()
+            if profile.api_key
+            else "not configured (optional)"
+        )
+        print(f"PubMed {profile.id} API key: {status}")
+    for profile in app_config.summarizers:
+        print(f"DeepSeek {profile.id} API key: {profile.api_key.availability()}")
+    for profile in app_config.mailers:
+        print(
+            f"Postmark {profile.id} server token: {profile.server_token.availability()}"
+        )
+    return 0
+
+
+def _show_app_config_path(args: argparse.Namespace) -> int:
+    print(args.app_config.expanduser().resolve())
+    return 0
 
 
 def _validate_config(args: argparse.Namespace) -> int:
-    config = load_config(args.config)
+    config, app_config = _load_configs(args)
     print(f"Configuration is valid: {config.path}")
+    print(f"App configuration: {app_config.path}")
     print(f"Categories: {len(config.categories)}")
     print(f"Database: {config.database}")
     return 0
 
 
 def _initialize_database(args: argparse.Namespace) -> int:
-    config = load_config(args.config)
+    config, _ = _load_configs(args)
     database = Database(config.database)
     try:
         database.initialize()
@@ -149,24 +259,28 @@ def _initialize_database(args: argparse.Namespace) -> int:
 
 
 def _run(args: argparse.Namespace) -> int:
-    config = load_config(args.config)
+    config, app_config = _load_configs(
+        args,
+        include_summarizer=not args.no_summarization,
+        include_mailer=not args.dry_run,
+    )
     with (
         _exclusive_run_lock(config.database),
         Database(config.database) as database,
         ExitStack() as stack,
     ):
-        pubmed, biorxiv = _create_sources(config, stack)
+        pubmed, biorxiv = _create_sources(config, app_config, stack)
+        summarizer = (
+            None
+            if args.no_summarization or not config.summarization.enabled
+            else _create_summarizer(config, app_config, stack)
+        )
         mailer = None
         if not args.dry_run:
-            token = os.environ.get(config.delivery.token_env)
-            if token is None or not token.strip():
-                raise ConfigurationError(
-                    f"environment variable {config.delivery.token_env!r} "
-                    "must contain the Postmark server token"
-                )
+            provider = app_config.mailer(config.delivery.provider)
             mailer = stack.enter_context(
                 PostmarkMailer(
-                    server_token=token,
+                    server_token=provider.server_token.resolve(),
                     from_address=config.newsletter.from_address,
                     to=config.newsletter.to,
                     message_stream=config.delivery.message_stream,
@@ -179,6 +293,7 @@ def _run(args: argparse.Namespace) -> int:
             pubmed=pubmed,
             biorxiv=biorxiv,
             mailer=mailer,
+            summarizer=summarizer,
             today=today,
             bootstrap=args.bootstrap,
             dry_run=args.dry_run,
@@ -197,25 +312,40 @@ def _run(args: argparse.Namespace) -> int:
 
 
 def _create_sources(
-    config: LitletterConfig, stack: ExitStack
+    config: LitletterConfig, app_config: AppConfig, stack: ExitStack
 ) -> tuple[PubMedClient | None, BioRxivClient | None]:
     configured_sources = {
         source for category in config.categories for source in category.sources
     }
     pubmed = None
     if PaperSource.PUBMED in configured_sources:
-        api_key = (
-            os.environ.get(config.pubmed.api_key_env)
-            if config.pubmed.api_key_env
-            else None
-        )
+        provider = app_config.pubmed(config.pubmed.provider or "")
+        api_key = provider.api_key.resolve_optional() if provider.api_key else None
         pubmed = stack.enter_context(
-            PubMedClient(email=config.pubmed.email, api_key=api_key)
+            PubMedClient(email=provider.email, api_key=api_key)
         )
     biorxiv = None
     if PaperSource.BIORXIV in configured_sources:
         biorxiv = stack.enter_context(BioRxivClient())
     return pubmed, biorxiv
+
+
+def _create_summarizer(
+    config: LitletterConfig, app_config: AppConfig, stack: ExitStack
+) -> DeepSeekSummarizer:
+    settings = config.summarization
+    provider = app_config.summarizer(settings.provider or "")
+    return stack.enter_context(
+        DeepSeekSummarizer(
+            profile_id=provider.id,
+            api_key=provider.api_key.resolve(),
+            base_url=provider.base_url,
+            model=settings.model,
+            audience=settings.audience,
+            max_words=settings.max_words,
+            timeout=provider.timeout_seconds,
+        )
+    )
 
 
 def _status(args: argparse.Namespace) -> int:
@@ -226,6 +356,7 @@ def _status(args: argparse.Namespace) -> int:
     print(f"Papers: {state.papers}")
     print(f"Category matches: {state.category_matches}")
     print(f"Unsent papers: {state.unsent_papers}")
+    print(f"Cached summaries: {state.cached_summaries}")
     print(f"Submitted editions: {state.submitted_editions}")
     print(f"Last successful date: {state.last_successful_until or 'never'}")
     if state.open_edition is None:
@@ -266,12 +397,42 @@ def _print_run_result(result: RunResult) -> None:
         print(f"Discovery window: {result.since} to {result.until}")
     print(f"Category matches processed: {result.matched}")
     print(f"Unsent papers selected: {result.unsent}")
+    print(f"Summaries created: {result.summaries_created}")
+    print(f"Summaries reused from cache: {result.summaries_cached}")
+    print(f"Summary fallbacks: {result.summary_failures}")
     print(result.message)
     if result.receipt is not None:
         print(
             f"Provider: {result.receipt.provider}; "
             f"message ID: {result.receipt.message_id}"
         )
+
+
+def _summarize(args: argparse.Namespace) -> int:
+    config, app_config = _load_configs(args)
+    if not config.summarization.enabled:
+        print("Summarization is disabled in the newsletter config")
+        return 0
+    with (
+        _exclusive_run_lock(config.database),
+        Database(config.database) as database,
+        ExitStack() as stack,
+    ):
+        database.sync_categories(config.categories)
+        summarizer = _create_summarizer(config, app_config, stack)
+        items = database.unsent_papers()
+        _, stats = enrich_pending_papers(
+            database,
+            items,
+            summarizer=summarizer,
+            failure_policy=config.summarization.failure_policy,
+        )
+    print(f"Pending papers: {len(items)}")
+    print(f"Summaries created: {stats.created}")
+    print(f"Summaries reused from cache: {stats.cached}")
+    print(f"Summary fallbacks: {stats.failed}")
+    print(f"Papers without abstracts: {stats.no_abstract}")
+    return 0
 
 
 @contextmanager
