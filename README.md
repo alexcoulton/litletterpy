@@ -26,20 +26,22 @@ Until Litletter's first PyPI release, clone this repository and replace
 uv tool install . && litletter init
 ```
 
-This creates `litletter.json`, a private provider configuration, and a small
-SQLite database. SQLite keeps track of delivered papers so they are not sent
-twice; there is no database server to install.
+Run this command in the folder where you want to keep your newsletter. It
+creates three files:
+
+- `./litletter.json` — newsletter addresses, categories, and behavior
+- `~/.config/litletter/app.json` — PubMed, Resend, and optional DeepSeek
+  credentials
+- `./state/litletter.sqlite3` — delivery history and cached papers
+
+SQLite keeps track of delivered papers so they are not sent twice; there is no
+database server to install. If `XDG_CONFIG_HOME` is set, `app.json` is created
+under `$XDG_CONFIG_HOME/litletter/` instead of `~/.config/litletter/`.
 
 ## Set up email delivery
 
-Create a free [Resend](https://resend.com/) account and an API key. Find your
-private provider configuration with:
-
-```console
-litletter app-config path
-```
-
-Open that file and add your PubMed contact email and Resend key:
+Create a free [Resend](https://resend.com/) account and an API key. Open
+`~/.config/litletter/app.json` and add your PubMed contact email and Resend key:
 
 ```json
 "pubmed-default": {
@@ -52,7 +54,7 @@ Open that file and add your PubMed contact email and Resend key:
 }
 ```
 
-Then open `litletter.json` and change the newsletter addresses:
+Then open `./litletter.json` and change the newsletter addresses:
 
 ```json
 "newsletter": {
@@ -70,7 +72,7 @@ use an address on that domain for `from`.
 
 ## Choose your categories
 
-Each category in `litletter.json` becomes a section in the email. Give it a
+Each category in `./litletter.json` becomes a section in the email. Give it a
 unique ID, a heading, a search query, and the sources to search:
 
 ```json
@@ -111,7 +113,7 @@ title:"spatial transcriptomics" AND journal_group:nature_portfolio
 
 Categories appear in the order listed. A paper matching several categories is
 shown only once, under its first match. If you add a bioRxiv category, also set
-`sources.biorxiv.enabled` to `true` in the same file.
+`sources.biorxiv.enabled` to `true` in `./litletter.json`.
 
 ## Preview and send
 
@@ -149,9 +151,9 @@ a daily entry with `crontab -e`. For example:
 15 7 * * * cd /path/to/your/litletter-folder && /absolute/path/to/litletter run
 ```
 
-Use absolute paths and keep `litletter.json` and its `state` directory in the
-working folder. Litletter prevents two scheduled runs from operating on the
-same database simultaneously.
+Use absolute paths and keep `./litletter.json` and `./state/litletter.sqlite3`
+in the working folder. Litletter prevents two scheduled runs from operating on
+the same database simultaneously.
 
 For a server using systemd, ready-to-adapt service and timer files are provided
 in [`deploy/`](deploy/). See [DEVELOPMENT.md](DEVELOPMENT.md#server-deployment)
@@ -160,7 +162,7 @@ for the setup commands.
 ## Optional AI summaries
 
 Litletter works without AI summaries. To enable them, put a DeepSeek API key in
-the `deepseek-default` entry of your private provider configuration:
+the `deepseek-default` entry of `~/.config/litletter/app.json`:
 
 ```json
 "deepseek-default": {
@@ -171,7 +173,7 @@ the `deepseek-default` entry of your private provider configuration:
 }
 ```
 
-Then enable summarization in `litletter.json`:
+Then enable summarization in `./litletter.json`:
 
 ```json
 "summarization": {
