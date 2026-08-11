@@ -62,8 +62,8 @@ class _Lexer:
                 tokens.append(self._single_character(_TokenKind.RIGHT_PAREN))
             elif character == ":":
                 tokens.append(self._single_character(_TokenKind.COLON))
-            elif character == '"':
-                tokens.append(self._phrase())
+            elif character in {'"', "'"}:
+                tokens.append(self._phrase(character))
             else:
                 tokens.append(self._word())
         tokens.append(_Token(_TokenKind.EOF, "", len(self._text)))
@@ -75,13 +75,13 @@ class _Lexer:
         self._position += 1
         return _Token(kind, value, position)
 
-    def _phrase(self) -> _Token:
+    def _phrase(self, delimiter: str) -> _Token:
         start = self._position
         self._position += 1
         characters: list[str] = []
         while self._position < len(self._text):
             character = self._text[self._position]
-            if character == '"':
+            if character == delimiter:
                 self._position += 1
                 value = " ".join("".join(characters).split())
                 if not value:
@@ -99,7 +99,7 @@ class _Lexer:
                         escape_position,
                     )
                 escaped = self._text[self._position]
-                if escaped not in {'"', "\\"}:
+                if escaped not in {delimiter, "\\"}:
                     raise QuerySyntaxError(
                         f"unsupported escape '\\{escaped}'",
                         self._text,

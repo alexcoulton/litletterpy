@@ -249,15 +249,17 @@ The language supports:
 
 - Case-insensitive `AND`, `OR`, and unary `NOT`.
 - Parentheses, with precedence `NOT`, then `AND`, then `OR`.
-- Quoted phrases, including `\"` and `\\` escapes.
+- Phrases in single or double quotes. Double-quoted phrases accept `\"` and
+  `\\` escapes; single-quoted phrases accept `\'` and `\\` escapes.
 - `title:`, `abstract:`, `title_abstract:`, `journal:`, `journal_group:`,
   `category:`, and `publication_type:` field prefixes.
 - Field-scoped groups such as `title:(cancer OR tumour)`.
 
 Unqualified terms search title and abstract. Unquoted terms match complete
-words, while quoted phrases match a contiguous substring. Matching is Unicode
-case-insensitive and collapses whitespace. Boolean operators must be explicit;
-Litletter does not insert an implicit `AND` between adjacent terms.
+words, while quoted phrases match a contiguous substring. Apostrophes within
+unquoted terms, such as `Alzheimer's`, remain part of the term. Matching is
+Unicode case-insensitive and collapses whitespace. Boolean operators must be
+explicit; Litletter does not insert an implicit `AND` between adjacent terms.
 
 `publication_type:original_research` retains research articles and bioRxiv
 preprints while excluding PubMed reviews, systematic reviews, meta-analyses,
@@ -313,8 +315,7 @@ from litletter import discover_papers, parse_query
 from litletter.sources import BioRxivClient, PubMedClient
 
 query = parse_query(
-    'title:("spatial transcriptomics" OR single-cell) '
-    "AND abstract:(cancer OR tumour)"
+    'title:("spatial transcriptomics" OR single-cell) AND abstract:(cancer OR tumour)'
 )
 
 with (

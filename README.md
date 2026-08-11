@@ -92,8 +92,8 @@ unique ID, a heading, a search query, and the sources to search:
 ]
 ```
 
-Queries support `AND`, `OR`, `NOT`, parentheses, and quoted phrases. The most
-useful search fields are:
+Queries support `AND`, `OR`, `NOT`, parentheses, and phrases in single or double
+quotes. The most useful search fields are:
 
 - `title:`, `abstract:`, or `title_abstract:`
 - `journal:` for one journal
@@ -114,6 +114,12 @@ title:"spatial transcriptomics" AND journal_group:nature_portfolio
 
 Use parentheses around the `OR` alternatives when combining them with another
 condition. The shorter `title_abstract:(cancer OR tumour)` syntax is equivalent.
+Single quotes are convenient for phrases inside JSON because they do not need
+escaping:
+
+```json
+"query": "title_abstract:'single cell' OR title_abstract:'spatial transcriptomics'"
+```
 
 Categories appear in the order listed. A paper matching several categories is
 shown only once, under its first match. If you add a bioRxiv category, also set

@@ -194,6 +194,19 @@ def test_quoted_phrases_are_case_insensitive_and_whitespace_normalized() -> None
     assert not query.matches(paper("A single-cell atlas of tissue"))
 
 
+def test_single_quoted_phrases_are_supported() -> None:
+    query = parse_query("title:'single cell atlas'")
+
+    assert query.matches(paper("A SINGLE\n cell   atlas of tissue"))
+    assert not query.matches(paper("A single-cell atlas of tissue"))
+
+
+def test_apostrophes_remain_part_of_unquoted_words() -> None:
+    query = parse_query("title_abstract:Alzheimer's")
+
+    assert query.matches(paper("Advances in Alzheimer's disease"))
+
+
 def test_unquoted_terms_use_word_boundaries() -> None:
     query = parse_query("cell")
 
@@ -211,6 +224,12 @@ def test_quoted_phrase_supports_quote_and_backslash_escapes() -> None:
     query = parse_query(r'title:"a \"quoted\" \\ result"')
 
     assert query.matches(paper('An a "quoted" \\ result appears'))
+
+
+def test_single_quoted_phrase_supports_quote_and_backslash_escapes() -> None:
+    query = parse_query(r"title:'Alzheimer\'s \\ study'")
+
+    assert query.matches(paper("An Alzheimer's \\ study appears"))
 
 
 def test_root_not_expression_is_supported() -> None:
@@ -260,6 +279,9 @@ def test_filter_papers_accepts_text_and_preserves_source_and_order() -> None:
         ('""', "quoted phrase must not be empty"),
         ('"unterminated', "unterminated quoted phrase"),
         (r'"bad\q escape"', "unsupported escape"),
+        ("''", "quoted phrase must not be empty"),
+        ("'unterminated", "unterminated quoted phrase"),
+        (r"'bad\q escape'", "unsupported escape"),
     ],
 )
 def test_invalid_queries_raise_clear_errors(text: str, message: str) -> None:
