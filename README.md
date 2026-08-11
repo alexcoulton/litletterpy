@@ -7,23 +7,23 @@ categories, and remembers what it has already sent.
 ## Install
 
 Litletter requires Python 3.11 or newer. Install it with
-[pipx](https://pipx.pypa.io/) and create the starter files in one command:
-
-```console
-pipx install litletter && litletter init
-```
-
-If you already use [uv](https://docs.astral.sh/uv/), the equivalent is:
+[uv](https://docs.astral.sh/uv/) and create the starter files in one command:
 
 ```console
 uv tool install litletter && litletter init
+```
+
+Alternatively, install it with [pipx](https://pipx.pypa.io/):
+
+```console
+pipx install litletter && litletter init
 ```
 
 Until Litletter's first PyPI release, clone this repository and replace
 `litletter` in the install command with `.`. For example:
 
 ```console
-pipx install . && litletter init
+uv tool install . && litletter init
 ```
 
 This creates `litletter.json`, a private provider configuration, and a small
