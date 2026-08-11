@@ -16,3 +16,5 @@ build/
 *.sqlite3.lock
 .env
 /litletter.json
+/litletter-preview*.html
+/previews/
