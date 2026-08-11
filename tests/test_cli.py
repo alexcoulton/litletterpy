@@ -139,6 +139,11 @@ def test_init_creates_complete_starter_without_overwriting(
     assert newsletter["sources"]["medrxiv"] == {"enabled": False}
     assert newsletter["sources"]["arxiv"] == {"enabled": False}
     assert app_config.stat().st_mode & 0o777 == 0o600
+    app = json.loads(app_config.read_text())
+    assert app["providers"]["mailers"]["resend-default"] == {
+        "type": "resend",
+        "api_key": "re_your_api_key",
+    }
     assert (config.parent / "state" / "litletter.sqlite3").exists()
     author_groups = config.parent / "author_groups.json"
     assert json.loads(author_groups.read_text())["groups"]["watchlist"]["authors"]

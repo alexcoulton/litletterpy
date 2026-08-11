@@ -21,9 +21,11 @@ litletter app-config validate
 ```
 
 Secrets can be stored directly as `api_key`/`server_token`, or indirectly as
-`api_key_env`/`server_token_env`. The generated app config uses environment
-references and mode `0600`, keeping secrets outside the repository. See
-[`examples/app.json`](examples/app.json) for the complete structure.
+`api_key_env`/`server_token_env`. The generated app config puts a Resend
+`api_key` placeholder directly in the file and uses environment references for
+the other optional credentials. The file is created with mode `0600` and must
+remain outside the repository. See [`examples/app.json`](examples/app.json) for
+the complete structure.
 
 Start a newsletter from [`examples/litletter.json`](examples/litletter.json).
 Paths such as `database` are resolved relative to the newsletter JSON file, not
@@ -105,8 +107,18 @@ Select a Resend provider and omit the Postmark-only message stream:
 }
 ```
 
-An API key can be stored directly in the private app config or supplied through
-the environment variable referenced by `api_key_env`:
+The generated private app config contains a placeholder for the API key. Replace
+it directly:
+
+```json
+"resend-default": {
+  "type": "resend",
+  "api_key": "re_your_api_key"
+}
+```
+
+For deployments that prefer environment variables, replace `api_key` with
+`"api_key_env": "LITLETTER_RESEND_API_KEY"`, then export it before running:
 
 ```console
 export LITLETTER_RESEND_API_KEY="re_your-api-key"

@@ -208,7 +208,7 @@ def app_config_template() -> dict[str, Any]:
                 },
                 "resend-default": {
                     "type": "resend",
-                    "api_key_env": "LITLETTER_RESEND_API_KEY",
+                    "api_key": "re_your_api_key",
                 },
             },
         },
