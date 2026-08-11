@@ -1,28 +1,71 @@
 # Litletter
 
-Litletter is a local Python package for fetching and normalizing papers from
-PubMed and bioRxiv, then applying a shared Boolean query language to their
-titles, abstracts, journals, and categories. Its CLI can run those searches on
-a schedule, retain delivery state in SQLite, and send a categorized email
-newsletter through Resend or Postmark without resending previously delivered
-papers.
+Litletter emails you the new research papers you care about. It searches PubMed
+and bioRxiv with Boolean queries, organizes results into categories, links to
+the articles by DOI, and remembers what it has already sent.
 
-## Development
+## Quick start
 
-The project uses [uv](https://docs.astral.sh/uv/) to manage its pinned Python
-3.12 environment and dependencies:
+Install Litletter and create a starter newsletter in one command:
 
 ```console
-uv sync
-uv run pytest
-uv run ruff check .
-uv run ruff format --check .
+uv tool install litletter && litletter init
 ```
 
-Installing the project creates the `litletter` command inside `.venv/bin`.
-Either activate the environment or prefix commands with `uv run`.
+Until the first PyPI release, run this from a cloned repository instead:
 
-## Scheduled newsletters
+```console
+uv tool install . && litletter init
+```
+
+The command creates:
+
+- `litletter.json` — searches, recipients, and newsletter presentation.
+- `~/.config/litletter/app.json` — API credentials, stored with private file
+  permissions.
+- `state/litletter.sqlite3` — local delivery history and duplicate prevention.
+
+### 1. Add your email and Resend key
+
+Open the app config shown by `litletter app-config path`. Set your PubMed contact
+email, then replace the Resend environment reference with your API key:
+
+```json
+"pubmed-default": {
+  "type": "pubmed",
+  "email": "you@example.com"
+},
+"resend-default": {
+  "type": "resend",
+  "api_key": "re_your_api_key"
+}
+```
+
+In `litletter.json`, replace `you@example.com` under `newsletter.to`. Resend's
+`onboarding@resend.dev` sender is suitable for sending a test to the email on
+your Resend account. For regular delivery, verify a domain in Resend and change
+`newsletter.from` to an address on that domain.
+
+### 2. Preview your first newsletter
+
+The starter search finds original cancer research in Nature, Science, and Cell:
+
+```console
+litletter run --bootstrap --dry-run --no-summarization \
+  --output litletter-preview.html
+```
+
+Open `litletter-preview.html`, then send the same papers:
+
+```console
+litletter run --no-summarization
+```
+
+That is a complete local setup. Edit the categories in `litletter.json` to
+follow different topics or journals, and schedule the same finite
+`litletter run` command when you are happy with the results.
+
+## Configuration
 
 Litletter deliberately separates machine-level provider credentials from
 newsletter behavior. The global app config defaults to
@@ -31,12 +74,11 @@ mailer profiles. A newsletter config references those profiles and contains
 addressing, discovery behavior, ordered searches, and presentation settings.
 `LITLETTER_APP_CONFIG` can override the global location.
 
-Create a private global template and edit its email and credentials:
+You can inspect or validate the generated app config at any time:
 
 ```console
-uv run litletter app-config init
-uv run litletter app-config path
-uv run litletter app-config validate
+litletter app-config path
+litletter app-config validate
 ```
 
 Secrets can be stored directly as `api_key`/`server_token`, or indirectly as
@@ -70,19 +112,19 @@ fall back to the source record otherwise. Abstracts are hidden by default;
 set `newsletter.include_abstracts` to `true` to restore excerpts controlled by
 `abstract_max_characters`. Enabled AI summaries remain visible independently.
 
-Copy and edit the example, then validate it and initialize its SQLite database:
+Validate the newsletter or initialize a database manually when not using
+`litletter init`:
 
 ```console
-cp examples/litletter.json litletter.json
-uv run litletter config validate --config litletter.json
-uv run litletter db init --config litletter.json
+litletter config validate --config litletter.json
+litletter db init --config litletter.json
 ```
 
 The first date window must be approved explicitly. Previewing it is the safest
 bootstrap workflow:
 
 ```console
-uv run litletter run --config litletter.json \
+litletter run --config litletter.json \
   --bootstrap --dry-run --output /tmp/litletter-preview.html
 ```
 
@@ -116,14 +158,14 @@ can be added without changing the pipeline.
 Precompute pending summaries without discovering or sending anything:
 
 ```console
-uv run litletter summarize --config litletter.json --pending
+litletter summarize --config litletter.json --pending
 ```
 
 Disable summarization persistently with `"enabled": false`, or bypass it for one
 run while retaining the cache:
 
 ```console
-uv run litletter run --config litletter.json --no-summarization
+litletter run --config litletter.json --no-summarization
 ```
 
 Dry runs can create cached summaries and therefore make billable DeepSeek API
@@ -147,7 +189,7 @@ or store it directly as `api_key` in the private app config:
 
 ```console
 export LITLETTER_RESEND_API_KEY="re_your-api-key"
-uv run litletter run --config litletter.json
+litletter run --config litletter.json
 ```
 
 Litletter sends through Resend's Email API and attaches an idempotency key based
@@ -164,7 +206,7 @@ or the environment variable referenced by that profile:
 
 ```console
 export LITLETTER_POSTMARK_TOKEN="your-server-token"
-uv run litletter run --config litletter.json
+litletter run --config litletter.json
 ```
 
 A verified individual sender signature is sufficient for this single-user
@@ -189,7 +231,7 @@ requests are deliberately not retried automatically. A definite rejection
 leaves a failed edition that can be resent after correction:
 
 ```console
-uv run litletter run --config litletter.json --retry-open-edition
+litletter run --config litletter.json --retry-open-edition
 ```
 
 If a timeout makes the outcome uncertain, the edition remains in `sending` and
@@ -198,13 +240,13 @@ shown by `litletter status`, then resolve it explicitly:
 
 ```console
 # The message exists at the provider:
-uv run litletter edition resolve --config litletter.json EDITION_ID \
+litletter edition resolve --config litletter.json EDITION_ID \
   --delivered --message-id PROVIDER_MESSAGE_ID
 
 # The provider confirms that it was not accepted:
-uv run litletter edition resolve --config litletter.json EDITION_ID \
+litletter edition resolve --config litletter.json EDITION_ID \
   --not-delivered
-uv run litletter run --config litletter.json --retry-open-edition
+litletter run --config litletter.json --retry-open-edition
 ```
 
 ### Scheduling on a server
@@ -415,3 +457,20 @@ The scratchpad enables `INFO` logging for the `litletter` package, showing the
 date window, PubMed selector, source candidate counts, local match counts, and
 the final total while discovery runs. Change `logging.INFO` to `logging.DEBUG`
 in the first block to additionally see PubMed batches and source pagination.
+
+## Development
+
+Contributors can create the pinned Python 3.12 environment and run the complete
+verification suite with [uv](https://docs.astral.sh/uv/):
+
+```console
+uv sync
+uv run pytest
+uv run ruff check .
+uv run ruff format --check .
+uv build
+```
+
+The editable package and `litletter` command are installed into `.venv` by
+`uv sync`. Activate that environment or prefix development commands with
+`uv run`.

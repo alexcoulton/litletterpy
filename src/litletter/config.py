@@ -161,6 +161,54 @@ def parse_config(payload: Any, *, path: Path) -> LitletterConfig:
     )
 
 
+def newsletter_config_template(
+    *,
+    pubmed_provider: str = "pubmed-default",
+    mailer_provider: str = "resend-default",
+    message_stream: str | None = None,
+) -> dict[str, Any]:
+    """Return a ready-to-edit single-user newsletter configuration."""
+    return {
+        "version": 2,
+        "database": "state/litletter.sqlite3",
+        "newsletter": {
+            "title": "My Litletter",
+            "from": "Litletter <onboarding@resend.dev>",
+            "to": ["you@example.com"],
+            "timezone": "UTC",
+            "include_abstracts": False,
+            "abstract_max_characters": 800,
+        },
+        "sources": {
+            "pubmed": {
+                "enabled": True,
+                "provider": pubmed_provider,
+            },
+            "biorxiv": {"enabled": False},
+        },
+        "discovery": {
+            "initial_lookback_days": 30,
+            "overlap_days": 2,
+        },
+        "categories": [
+            {
+                "id": "nsc-cancer",
+                "name": "Nature, Science and Cell: Cancer",
+                "query": (
+                    "title_abstract:cancer AND journal_group:flagship_nsc "
+                    "AND publication_type:original_research"
+                ),
+                "sources": ["pubmed"],
+            }
+        ],
+        "summarization": {"enabled": False},
+        "delivery": {
+            "provider": mailer_provider,
+            **({"message_stream": message_stream} if message_stream else {}),
+        },
+    }
+
+
 def validate_provider_references(
     config: LitletterConfig,
     app_config: AppConfig,

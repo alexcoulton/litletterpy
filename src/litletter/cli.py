@@ -25,6 +25,7 @@ from litletter.app_config import (
 from litletter.config import (
     LitletterConfig,
     load_config,
+    newsletter_config_template,
     validate_provider_references,
 )
 from litletter.delivery import Mailer, PostmarkMailer, ResendMailer
@@ -61,6 +62,12 @@ def _build_parser() -> argparse.ArgumentParser:
         description="Discover papers and send a categorized literature newsletter.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
+
+    initialize_all = commands.add_parser(
+        "init", help="create a starter newsletter and provider configuration"
+    )
+    _add_config_argument(initialize_all)
+    initialize_all.set_defaults(handler=_initialize)
 
     app_command = commands.add_parser("app-config", help="global provider config")
     app_commands = app_command.add_subparsers(required=True)
@@ -200,16 +207,92 @@ def _load_configs(
 
 def _initialize_app_config(args: argparse.Namespace) -> int:
     path = args.app_config.expanduser().resolve()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-            json.dump(app_config_template(), handle, indent=2)
-            handle.write("\n")
-    except FileExistsError as exc:
-        raise ConfigurationError(f"app config already exists: {path}") from exc
+    _write_json_exclusive(path, app_config_template(), mode=0o600, kind="app config")
     print(f"App config created with mode 0600: {path}")
     return 0
+
+
+def _initialize(args: argparse.Namespace) -> int:
+    config_path = args.config.expanduser().resolve()
+    app_path = args.app_config.expanduser().resolve()
+    if config_path.exists():
+        raise ConfigurationError(f"newsletter config already exists: {config_path}")
+    database_path = config_path.parent / "state" / "litletter.sqlite3"
+    if database_path.exists():
+        raise ConfigurationError(f"starter database already exists: {database_path}")
+
+    if app_path.exists():
+        app_config = load_app_config(app_path)
+        app_message = f"Using existing app config: {app_path}"
+    else:
+        _write_json_exclusive(
+            app_path, app_config_template(), mode=0o600, kind="app config"
+        )
+        app_config = load_app_config(app_path)
+        app_message = f"Created private app config: {app_path}"
+
+    if not app_config.paper_sources:
+        raise ConfigurationError("app config has no paper source profiles")
+    if not app_config.mailers:
+        raise ConfigurationError("app config has no mailer profiles")
+    pubmed_provider = app_config.paper_sources[0].id
+    mailer = next(
+        (
+            profile
+            for profile in app_config.mailers
+            if isinstance(profile, ResendProviderConfig)
+        ),
+        app_config.mailers[0],
+    )
+    _write_json_exclusive(
+        config_path,
+        newsletter_config_template(
+            pubmed_provider=pubmed_provider,
+            mailer_provider=mailer.id,
+            message_stream=(
+                "broadcasts" if isinstance(mailer, PostmarkProviderConfig) else None
+            ),
+        ),
+        mode=0o644,
+        kind="newsletter config",
+    )
+    config = load_config(config_path)
+    validate_provider_references(config, app_config)
+    database = Database(config.database)
+    try:
+        database.initialize()
+        database.sync_categories(config.categories)
+    finally:
+        database.close()
+
+    print(f"Created newsletter config: {config_path}")
+    print(app_message)
+    print(f"Initialized database: {config.database}")
+    credential = (
+        "Resend API key"
+        if isinstance(mailer, ResendProviderConfig)
+        else "Postmark server token and message stream"
+    )
+    print(f"\nNext: edit the email addresses and {credential}, then preview with:")
+    print("litletter run --bootstrap --dry-run --output litletter-preview.html")
+    return 0
+
+
+def _write_json_exclusive(
+    path: Path,
+    payload: object,
+    *,
+    mode: int,
+    kind: str,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+            handle.write("\n")
+    except FileExistsError as exc:
+        raise ConfigurationError(f"{kind} already exists: {path}") from exc
 
 
 def _validate_app_config(args: argparse.Namespace) -> int:
