@@ -1,0 +1,45 @@
+{
+  "version": 2,
+  "database": "state/cancer-watchlist.sqlite3",
+  "author_groups": "builtin:cancer_researchers",
+  "newsletter": {
+    "title": "Cancer Researcher Preprints",
+    "from": "Litletter <newsletter@updates.example.com>",
+    "to": ["you@example.com"],
+    "timezone": "Europe/London",
+    "include_abstracts": false,
+    "abstract_max_characters": 800
+  },
+  "sources": {
+    "pubmed": {
+      "enabled": false
+    },
+    "biorxiv": {
+      "enabled": true
+    },
+    "medrxiv": {
+      "enabled": true
+    },
+    "arxiv": {
+      "enabled": true
+    }
+  },
+  "discovery": {
+    "initial_lookback_days": 30,
+    "overlap_days": 2
+  },
+  "categories": [
+    {
+      "id": "cancer-researcher-watchlist",
+      "name": "Cancer Researcher Watchlist",
+      "query": "author_group:cancer-watchlist",
+      "sources": ["biorxiv", "medrxiv", "arxiv"]
+    }
+  ],
+  "summarization": {
+    "enabled": false
+  },
+  "delivery": {
+    "provider": "resend-default"
+  }
+}

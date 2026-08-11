@@ -1,0 +1,388 @@
+{
+  "version": 2,
+  "as_of": "2026-08-11",
+  "methodology": "A discovery-focused international watchlist of active and influential cancer researchers. Selection combines recent cancer-preprint activity, recent scholarly influence, major cancer research awards and funding, leadership of field-defining programmes, and coverage of major biological and translational specialties. Historical figures without substantial current research activity are excluded. Group assignment is deliberately mutually exclusive so the combined collection can be resolved without duplicate identities.",
+  "source_urls": [
+    "https://www.cancer.gov/grants-training/grants-funding/funding-opportunities/oia/award-recipients",
+    "https://www.aacr.org/professionals/research/scientific-achievement-awards-and-lectureships/scientific-award-recipients/",
+    "https://www.cancergrandchallenges.org/challenges",
+    "https://api.biorxiv.org/",
+    "https://api.openalex.org/"
+  ],
+  "groups": {
+    "cancer-genomics-evolution": {
+      "description": "Cancer genomes, mutational processes, tumour evolution and intratumour heterogeneity",
+      "match_initials": true,
+      "authors": [
+        "Charles Swanton",
+        {
+          "name": "Peter J. Campbell",
+          "match_initials": false
+        },
+        "Michael R. Stratton",
+        "Gad Getz",
+        "Matthew Meyerson",
+        "Elaine R. Mardis",
+        "Bert Vogelstein",
+        "Tyler Jacks",
+        "Nicholas Navin",
+        "Christina Curtis",
+        {
+          "name": "Sohrab P. Shah",
+          "match_initials": false
+        },
+        "Paul S. Mischel",
+        "David Pellman",
+        "Ludmil B. Alexandrov",
+        "Nuria Lopez-Bigas",
+        "Moritz Gerstung",
+        "Andrea Sottoriva",
+        "Trevor A. Graham",
+        "Marco Gerlinger",
+        "Franziska Michor",
+        "Yinyin Yuan",
+        "Paul C. Boutros",
+        "Andrew J. Futreal"
+      ]
+    },
+    "cancer-immunology-cell-therapy": {
+      "description": "Cancer immunology, immune checkpoint therapy, engineered cell therapy and tumour immunity",
+      "match_initials": true,
+      "authors": [
+        "James P. Allison",
+        "Carl H. June",
+        "Michel Sadelain",
+        "Crystal L. Mackall",
+        "Marcela V. Maus",
+        "Antoni Ribas",
+        "Jedd D. Wolchok",
+        "Padmanee Sharma",
+        "Drew M. Pardoll",
+        "Robert D. Schreiber",
+        "Mark J. Smyth",
+        "Ton N. Schumacher",
+        "Miriam Merad",
+        {
+          "name": "Caetano Reis e Sousa",
+          "aliases": ["Reis e Sousa, Caetano"]
+        },
+        {
+          "name": "Lieping Chen",
+          "match_initials": false
+        },
+        {
+          "name": "Gordon J. Freeman",
+          "match_initials": false
+        },
+        "Arlene H. Sharpe",
+        {
+          "name": "Catherine J. Wu",
+          "match_initials": false
+        },
+        "Nir Hacohen",
+        "Timothy A. Chan",
+        "Steven A. Rosenberg",
+        "Stanley R. Riddell",
+        "Philip D. Greenberg",
+        "Katy Rezvani",
+        "Andrea Schietinger",
+        "Stefani Spranger",
+        "Ignacio Melero",
+        "Pamela S. Ohashi",
+        "Sergio A. Quezada",
+        "David H. Raulet"
+      ]
+    },
+    "tumour-microenvironment-metastasis": {
+      "description": "Metastasis, stromal biology, tumour ecosystems, angiogenesis and mechanobiology",
+      "match_initials": true,
+      "authors": [
+        "Joan Massague",
+        "Robert A. Weinberg",
+        "Douglas Hanahan",
+        "Johanna A. Joyce",
+        {
+          "name": "Karin E. de Visser",
+          "aliases": ["de Visser, Karin E."]
+        },
+        "Lisa M. Coussens",
+        "Raghu Kalluri",
+        "Yibin Kang",
+        "David Lyden",
+        "Valerie M. Weaver",
+        {
+          "name": "Rakesh K. Jain",
+          "match_initials": false
+        },
+        "Melody A. Swartz",
+        "Mikala Egeblad",
+        "Ilaria Malanchi",
+        "Cyrus M. Ghajar",
+        {
+          "name": "Sandra S. McAllister",
+          "match_initials": false
+        },
+        "Richard O. Hynes",
+        "Alex Swarbrick",
+        "Eduard Batlle",
+        "Amaia Lujambio",
+        "Robert A. Gatenby"
+      ]
+    },
+    "cancer-epigenetics-dna-repair-cell-death": {
+      "description": "Cancer epigenetics, chromatin, genome maintenance, DNA repair and regulated cell death",
+      "match_initials": true,
+      "authors": [
+        "Karen H. Vousden",
+        "Scott W. Lowe",
+        "Kristian Helin",
+        "Stephen B. Baylin",
+        {
+          "name": "Peter A. Jones",
+          "institution": "Van Andel Institute",
+          "match_initials": false
+        },
+        "Jean-Pierre J. Issa",
+        "Cigall Kadoch",
+        "William G. Kaelin Jr.",
+        {
+          "name": "Yang Shi",
+          "institution": "University of Oxford",
+          "match_initials": false
+        },
+        {
+          "name": "Howard Y. Chang",
+          "match_initials": false
+        },
+        {
+          "name": "Anjana Rao",
+          "match_initials": false
+        },
+        "Bradley E. Bernstein",
+        "Ali Shilatifard",
+        "Cheryl H. Arrowsmith",
+        {
+          "name": "Xiaodong Wang",
+          "institution": "National Institute of Biological Sciences, Beijing",
+          "match_initials": false
+        },
+        {
+          "name": "Douglas R. Green",
+          "match_initials": false
+        },
+        "Andreas Strasser",
+        "Scott J. Dixon",
+        "Brent R. Stockwell",
+        {
+          "name": "Eileen White",
+          "match_initials": false
+        },
+        "Guido Kroemer",
+        {
+          "name": "Stephen P. Jackson",
+          "match_initials": false
+        },
+        "Stephen J. Elledge",
+        "Alan Ashworth",
+        {
+          "name": "Chris J. Lord",
+          "match_initials": false
+        },
+        "Maria Jasin",
+        "Roger A. Greenberg",
+        "Agata Smogorzewska",
+        "Simon J. Boulton"
+      ]
+    },
+    "precision-oncology-drug-resistance": {
+      "description": "Cancer dependencies, targeted therapy, precision oncology, chemical biology and resistance",
+      "match_initials": true,
+      "authors": [
+        "Lewis C. Cantley",
+        "Charles L. Sawyers",
+        "Neal Rosen",
+        {
+          "name": "William R. Sellers",
+          "match_initials": false
+        },
+        {
+          "name": "William C. Hahn",
+          "match_initials": false
+        },
+        "Jesse S. Boehm",
+        "Todd R. Golub",
+        "David A. Tuveson",
+        "Kevan M. Shokat",
+        "Nathanael S. Gray",
+        "Frank McCormick",
+        "Karen Cichowski",
+        "Jeffrey Settleman",
+        "Rene Bernards",
+        "Alberto Bardelli",
+        "Fabrice Andre",
+        {
+          "name": "Johann S. de Bono",
+          "aliases": ["de Bono, Johann S."]
+        },
+        "Nicholas C. Turner",
+        "Pasi A. Janne",
+        {
+          "name": "Alice T. Shaw",
+          "match_initials": false
+        },
+        {
+          "name": "Kwok-Kin Wong",
+          "match_initials": false
+        },
+        "David B. Solit",
+        "Andrew A. Aguirre",
+        "Trever G. Bivona",
+        {
+          "name": "Ben Ho Park",
+          "match_initials": false
+        },
+        "Carlos L. Arteaga",
+        "Sarat Chandarlapaty",
+        "Keith T. Flaherty"
+      ]
+    },
+    "early-detection-computational-spatial": {
+      "description": "Early detection, liquid biopsy, cancer data science, single-cell analysis and spatial biology",
+      "match_initials": true,
+      "authors": [
+        {
+          "name": "Dennis Y. M. Lo",
+          "aliases": ["Yuk Ming Dennis Lo", "Lo, Y. M. D."],
+          "match_initials": false
+        },
+        {
+          "name": "Luis A. Diaz Jr.",
+          "match_initials": false
+        },
+        "Victor E. Velculescu",
+        "Nickolas Papadopoulos",
+        "Rebecca C. Fitzgerald",
+        {
+          "name": "Daniel D. De Carvalho",
+          "aliases": ["De Carvalho, Daniel D."]
+        },
+        "Ash A. Alizadeh",
+        "Maximilian Diehn",
+        "Nitzan Rosenfeld",
+        "Christopher Abbosh",
+        "Dana Pe'er",
+        "Aviv Regev",
+        "Regina Barzilay",
+        "Faisal Mahmood",
+        "Olivier Elemento",
+        "Nikolaus Schultz",
+        "Benjamin Haibe-Kains",
+        "Garry P. Nolan",
+        "Sarah A. Teichmann",
+        "Rahul Satija",
+        "Sandro Santagata",
+        "Mario L. Suva",
+        "Itai Yanai",
+        "Elana J. Fertig",
+        "Eliezer M. Van Allen"
+      ]
+    },
+    "haematological-malignancies": {
+      "description": "Leukaemia, lymphoma, myeloma, clonal haematopoiesis and haematopoietic stem-cell biology",
+      "match_initials": true,
+      "authors": [
+        "Benjamin L. Ebert",
+        "Ross L. Levine",
+        "Scott A. Armstrong",
+        "Margaret A. Shipp",
+        "Kimberly Stegmaier",
+        "Ari Melnick",
+        "Iannis Aifantis",
+        "Adolfo A. Ferrando",
+        {
+          "name": "John E. Dick",
+          "match_initials": false
+        },
+        "Andreas Trumpp",
+        "Kamil R. Kranc",
+        "Brian J. P. Huntly",
+        "David T. Scadden",
+        "David M. Weinstock",
+        {
+          "name": "Andrew A. Lane",
+          "institution": "Dana-Farber Cancer Institute",
+          "match_initials": false
+        },
+        "Ann Mullally",
+        "Omar Abdel-Wahab",
+        "Timothy J. Ley",
+        {
+          "name": "Daniel C. Link",
+          "match_initials": false
+        },
+        "Ravi Majeti",
+        {
+          "name": "Craig T. Jordan",
+          "match_initials": false
+        },
+        "Monica L. Guzman",
+        "Marina Konopleva",
+        "Michael Andreeff",
+        "Stephen D. Nimer",
+        "Louis M. Staudt"
+      ]
+    },
+    "organ-specific-translational-oncology": {
+      "description": "Influential active researchers spanning major solid tumours and paediatric cancers",
+      "match_initials": true,
+      "authors": [
+        "Kornelia Polyak",
+        "Joan S. Brugge",
+        {
+          "name": "Myles Brown",
+          "match_initials": false
+        },
+        "Andrew N. Tutt",
+        "Carlos Caldas",
+        "David P. Carbone",
+        "Lecia V. Sequist",
+        "Dafna Bar-Sagi",
+        "Anirban Maitra",
+        "Arul M. Chinnaiyan",
+        {
+          "name": "Peter S. Nelson",
+          "match_initials": false
+        },
+        "Jeremy N. Rich",
+        "Frank B. Furnari",
+        "Michelle Monje",
+        "Stefan M. Pfister",
+        "Mariella G. Filbin",
+        "Ronny Drapkin",
+        "David D. Bowtell",
+        "Josep M. Llovet",
+        "Toni K. Choueiri",
+        "Ze'ev A. Ronai",
+        "Hans Clevers",
+        "Charles W. M. Roberts"
+      ]
+    },
+    "cancer-watchlist": {
+      "description": "Combined discovery-focused collection of prominent active cancer researchers",
+      "includes": [
+        "cancer-genomics-evolution",
+        "cancer-immunology-cell-therapy",
+        "tumour-microenvironment-metastasis",
+        "cancer-epigenetics-dna-repair-cell-death",
+        "precision-oncology-drug-resistance",
+        "early-detection-computational-spatial",
+        "haematological-malignancies",
+        "organ-specific-translational-oncology"
+      ]
+    }
+  },
+  "aliases": {
+    "cancer-researchers": "cancer-watchlist",
+    "cancer-researcher-watchlist": "cancer-watchlist"
+  }
+}

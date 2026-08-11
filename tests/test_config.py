@@ -152,3 +152,14 @@ def test_config_rejects_unknown_author_group(tmp_path: Path) -> None:
 
     with pytest.raises(ConfigurationError, match="unknown author group 'missing'"):
         parse_config(payload, path=tmp_path / "litletter.json")
+
+
+def test_config_loads_builtin_author_collection() -> None:
+    payload = config_payload()
+    payload["author_groups"] = "builtin:cancer_researchers"
+    payload["categories"][0]["query"] = "author_group:cancer-watchlist"
+
+    config = parse_config(payload, path=Path("/tmp/litletter.json"))
+
+    assert config.author_catalog is not None
+    assert len(config.author_catalog.get("cancer-watchlist").authors) == 205

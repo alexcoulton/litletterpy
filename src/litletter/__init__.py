@@ -3,6 +3,8 @@
 from litletter.author_groups import (
     AuthorCatalog,
     AuthorGroup,
+    AuthorIdentity,
+    get_builtin_author_catalog,
     load_author_catalog,
 )
 from litletter.discovery import discover_papers
@@ -22,6 +24,7 @@ __all__ = [
     "AuthorCatalog",
     "AuthorCatalogError",
     "AuthorGroup",
+    "AuthorIdentity",
     "JournalCatalog",
     "JournalCatalogError",
     "JournalGroup",
@@ -33,6 +36,7 @@ __all__ = [
     "UnknownJournalGroupError",
     "discover_papers",
     "filter_papers",
+    "get_builtin_author_catalog",
     "get_journal_catalog",
     "load_author_catalog",
     "parse_query",

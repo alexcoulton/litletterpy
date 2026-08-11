@@ -10,6 +10,7 @@ import pytest
 from litletter.errors import ResponseParseError
 from litletter.models import PaperSource
 from litletter.sources import BioRxivClient
+from litletter.sources.biorxiv import _parse_authors
 
 
 def test_fetch_paginates_and_normalizes_records(fixture_dir: Path) -> None:
@@ -78,6 +79,20 @@ def test_fetch_stops_at_max_results(fixture_dir: Path) -> None:
 
     assert len(papers) == 1
     assert calls == 1
+
+
+def test_corresponding_author_full_name_replaces_abbreviated_source_name() -> None:
+    authors = _parse_authors(
+        "Salome, B.; Horowitz, A.; Smith, J.",
+        corresponding="Amir Horowitz",
+        source_name="bioRxiv",
+    )
+
+    assert [author.name for author in authors] == [
+        "Salome, B.",
+        "Amir Horowitz",
+        "Smith, J.",
+    ]
 
 
 def test_fetch_retries_transient_response(fixture_dir: Path) -> None:

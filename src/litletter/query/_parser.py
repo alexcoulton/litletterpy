@@ -65,7 +65,15 @@ def _expand_author_groups(
         group = catalog.get(expression.text)
         groups.append(group.name)
         terms = [
-            Term(author, field=Field.AUTHOR, phrase=True) for author in group.authors
+            Term(
+                author.query_text,
+                field=Field.AUTHOR,
+                phrase=True,
+                author_aliases=author.aliases,
+                author_orcid=author.orcid,
+                author_match_initials=author.match_initials,
+            )
+            for author in group.authors
         ]
         return _balanced_or(terms)
     if isinstance(expression, Not):

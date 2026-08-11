@@ -297,8 +297,15 @@ family name and initial cannot be distinguished; use an ORCID in the
 `author:` query when that source provides one.
 
 Long author watchlists belong in the user-owned `author_groups.json` referenced
-by the newsletter config. A group contains an `authors` array of full names or
-ORCIDs and may compose other groups with `includes`. The query
+by the newsletter config. Version 1 string entries remain supported; version 2
+also accepts identity objects with `name`, `orcid`, `aliases`, `institution`,
+and `match_initials`. The canonical name is compiled upstream, while all
+identity fields except the documentation-only institution contribute to local
+matching. Version 2 defaults `match_initials` to false to avoid surname/initial
+collisions in large watchlists; version 1 strings retain the original
+high-recall behavior. Groups may set a shared `match_initials` default, with an
+individual identity overriding it.
+A group may compose other groups with `includes`. The query
 `author_group:watchlist` expands the named collection into ordinary quoted
 `author:` terms before upstream candidate compilation and local evaluation.
 This keeps matching semantics identical across PubMed, bioRxiv, medRxiv, and

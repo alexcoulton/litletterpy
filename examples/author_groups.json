@@ -1,19 +1,29 @@
 {
-  "version": 1,
+  "version": 2,
   "groups": {
     "watchlist": {
       "description": "Authors whose new papers I always want to see",
       "authors": [
-        "Ada Lovelace",
-        "Grace Hopper",
-        "0000-0001-2345-6789"
+        {
+          "name": "Ada Lovelace",
+          "orcid": "0000-0001-2345-6789",
+          "aliases": ["Augusta Ada King"],
+          "institution": "Example University"
+        },
+        {
+          "name": "Grace Hopper"
+        }
       ]
     },
     "cancer-researchers": {
       "description": "A reusable specialist subset",
       "authors": [
-        "Jane Smith",
-        "Alex Coulton"
+        {
+          "name": "Jane Smith"
+        },
+        {
+          "name": "Alex Coulton"
+        }
       ]
     },
     "combined-watchlist": {

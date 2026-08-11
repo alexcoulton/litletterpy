@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from functools import lru_cache
 
 from litletter.models import Author
@@ -19,6 +20,24 @@ def matches_author(author: Author, term: str, *, phrase: bool) -> bool:
     return phrase and _same_person(author.name, term)
 
 
+def matches_author_identity(
+    author: Author,
+    name: str,
+    *,
+    aliases: tuple[str, ...],
+    orcid: str | None,
+    match_initials: bool,
+) -> bool:
+    """Match one structured watchlist identity against a paper author."""
+    if author.orcid and orcid:
+        return _normalize_orcid(author.orcid) == _normalize_orcid(orcid)
+    return any(
+        _contains(author.name, candidate, phrase=True)
+        or _same_person(author.name, candidate, allow_initials=match_initials)
+        for candidate in (name, *aliases)
+    )
+
+
 def candidate_family_name(value: str) -> str | None:
     """Return a likely family name from a full natural or comma-inverted name.
 
@@ -31,12 +50,14 @@ def candidate_family_name(value: str) -> str | None:
     return " ".join(family)
 
 
-def _same_person(left: str, right: str) -> bool:
+def _same_person(left: str, right: str, *, allow_initials: bool = True) -> bool:
     left_family, left_given = _identity(left)
     right_family, right_given = _identity(right)
     if not left_family or not right_family or left_family != right_family:
         return False
     if not left_given or not right_given:
+        return False
+    if not allow_initials and (len(left_given[0]) == 1 or len(right_given[0]) == 1):
         return False
     return _given_name_matches(left_given[0], right_given[0])
 
@@ -53,7 +74,7 @@ def _identity(value: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
 
 
 def _tokens(value: str) -> tuple[str, ...]:
-    normalized = value.casefold().replace("\u2019", "'")
+    normalized = _fold(value).replace("\u2019", "'")
     return tuple(_NAME_TOKEN.findall(normalized))
 
 
@@ -72,11 +93,22 @@ def _given_name_matches(left: str, right: str) -> bool:
 
 
 def _contains(value: str, term: str, *, phrase: bool) -> bool:
-    normalized_value = " ".join(value.casefold().split())
-    normalized_term = " ".join(term.casefold().split())
+    normalized_value = " ".join(_fold(value).split())
+    normalized_term = " ".join(_fold(term).split())
     if phrase:
         return normalized_term in normalized_value
     return _word_pattern(normalized_term).search(normalized_value) is not None
+
+
+def _normalize_orcid(value: str) -> str:
+    return value.casefold().removeprefix("https://orcid.org/")
+
+
+def _fold(value: str) -> str:
+    decomposed = unicodedata.normalize("NFKD", value.casefold())
+    return "".join(
+        character for character in decomposed if not unicodedata.combining(character)
+    )
 
 
 @lru_cache(maxsize=256)

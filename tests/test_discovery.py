@@ -135,6 +135,29 @@ def test_author_group_compiles_to_pubmed_author_selector() -> None:
     )
 
 
+def test_structured_author_uses_name_not_orcid_for_pubmed_selector() -> None:
+    catalog = _parse_catalog(
+        {
+            "version": 2,
+            "groups": {
+                "watchlist": {
+                    "authors": [
+                        {
+                            "name": "Alex Coulton",
+                            "orcid": "0000-0001-2345-6789",
+                            "aliases": ["Alexander Coulton"],
+                        }
+                    ]
+                }
+            },
+        }
+    )
+
+    query = parse_query("author_group:watchlist", author_catalog=catalog)
+
+    assert compile_pubmed_candidate_query(query) == '"coulton"[Author]'
+
+
 def test_discovery_fetches_both_sources_then_filters_and_sorts() -> None:
     start = date(2026, 8, 1)
     end = date(2026, 8, 9)

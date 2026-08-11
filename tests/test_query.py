@@ -171,6 +171,12 @@ def test_author_field_matches_names_across_source_formats() -> None:
     assert not query.matches(paper("Paper", authors=(Author("Alex Colton"),)))
 
 
+def test_author_matching_is_diacritic_insensitive() -> None:
+    assert parse_query("author:'Joan Massague'").matches(
+        paper("Paper", authors=(Author("Massagué, J."),))
+    )
+
+
 def test_author_field_matches_unquoted_name_parts_and_orcid() -> None:
     candidate = paper(
         "Paper",
@@ -224,6 +230,70 @@ def test_author_group_expands_a_named_watchlist() -> None:
         )
     )
     assert not query.matches(paper("Paper", authors=(Author("Jane Smith"),)))
+
+
+def test_structured_author_group_uses_name_aliases_and_orcid() -> None:
+    catalog = _parse_catalog(
+        {
+            "version": 2,
+            "groups": {
+                "watchlist": {
+                    "authors": [
+                        {
+                            "name": "Alex Coulton",
+                            "orcid": "0000-0001-2345-6789",
+                            "aliases": ["Alexander Coulton"],
+                        }
+                    ]
+                }
+            },
+        }
+    )
+    query = parse_query("author_group:watchlist", author_catalog=catalog)
+
+    assert query.matches(paper("Paper", authors=(Author("Alexander Coulton"),)))
+    assert query.matches(paper("Paper", authors=(Author("Alex B. Coulton"),)))
+    assert not query.matches(paper("Paper", authors=(Author("Coulton, A."),)))
+    assert query.matches(
+        paper("Paper", authors=(Author("Unrelated", "0000-0001-2345-6789"),))
+    )
+    assert not query.matches(
+        paper("Paper", authors=(Author("Alex Coulton", "0000-0009-9999-9999"),))
+    )
+
+
+def test_version_two_string_authors_do_not_match_initials_by_default() -> None:
+    catalog = _parse_catalog(
+        {
+            "version": 2,
+            "groups": {"watchlist": {"authors": ["Peter Campbell"]}},
+        }
+    )
+    query = parse_query("author_group:watchlist", author_catalog=catalog)
+
+    assert query.matches(paper("Paper", authors=(Author("Peter J. Campbell"),)))
+    assert not query.matches(paper("Paper", authors=(Author("Campbell, P."),)))
+
+
+def test_author_group_can_enable_initial_matching_with_per_author_override() -> None:
+    catalog = _parse_catalog(
+        {
+            "version": 2,
+            "groups": {
+                "watchlist": {
+                    "match_initials": True,
+                    "authors": [
+                        "Anirban Maitra",
+                        {"name": "Peter Campbell", "match_initials": False},
+                    ],
+                }
+            },
+        }
+    )
+    query = parse_query("author_group:watchlist", author_catalog=catalog)
+
+    assert query.matches(paper("Paper", authors=(Author("Maitra, A."),)))
+    assert not query.matches(paper("Paper", authors=(Author("Campbell, P."),)))
 
 
 def test_author_group_requires_a_configured_catalog() -> None:

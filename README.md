@@ -158,19 +158,23 @@ shown only once, under its first match.
 
 ## Add an author watchlist
 
-Keep long, reusable author lists in `./author_groups.json`. Each entry may be a
-full name or an ORCID:
+Keep long, reusable author lists in `./author_groups.json`. Structured entries
+can record a full name, ORCID, aliases, and the intended institution:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "groups": {
     "watchlist": {
       "description": "Authors whose new papers I always want to see",
       "authors": [
-        "Ada Lovelace",
-        "Grace Hopper",
-        "0000-0001-2345-6789"
+        {
+          "name": "Ada Lovelace",
+          "orcid": "0000-0001-2345-6789",
+          "aliases": ["Augusta Ada King"],
+          "institution": "Example University"
+        },
+        {"name": "Grace Hopper"}
       ]
     }
   }
@@ -200,9 +204,25 @@ title_abstract:cancer AND
 (journal_group:flagship_nsc OR author_group:watchlist)
 ```
 
+`name` is used for upstream searches, while optional `orcid` and `aliases`
+improve local identity matching. `institution` documents which person is
+intended and is not currently used as a matching condition. Version 2 entries
+do not match abbreviated given names by default, avoiding collisions such as
+`P. Campbell`; set `"match_initials": true` only when that extra recall is worth
+the ambiguity. It can be set once on a group and overridden on individual
+authors, which is useful for enabling initials only for distinctive names.
+
 Groups can reuse other groups with an `"includes"` array. For a short ad hoc
 list, `author:('Ada Lovelace' OR 'Grace Hopper')` remains available. Editing a
 referenced group automatically invalidates stale, unsent category matches.
+
+Litletter also provides a curated
+[`cancer_researchers.json`](src/litletter/data/author_groups/cancer_researchers.json)
+watchlist of 205 active and influential cancer researchers. Set
+`"author_groups"` to `"builtin:cancer_researchers"` and use
+`author_group:cancer-watchlist`. Its preprint-focused methodology, specialty
+groups, sources, and limitations are documented in
+[`collections/README.md`](collections/README.md).
 
 ## Preview and send
 
@@ -286,4 +306,6 @@ so delivery retries do not call the model again.
   configuration.
 - [`examples/author_groups.json`](examples/author_groups.json) demonstrates
   reusable author lists and included groups.
+- [`examples/cancer_watchlist_litletter.json`](examples/cancer_watchlist_litletter.json)
+  is a ready-to-edit preprint newsletter using the curated cancer collection.
 - [`examples/app.json`](examples/app.json) shows all provider profiles.

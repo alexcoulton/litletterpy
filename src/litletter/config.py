@@ -15,7 +15,11 @@ from litletter.app_config import (
     PostmarkProviderConfig,
     ResendProviderConfig,
 )
-from litletter.author_groups import AuthorCatalog, load_author_catalog
+from litletter.author_groups import (
+    AuthorCatalog,
+    get_builtin_author_catalog,
+    load_author_catalog,
+)
 from litletter.errors import ConfigurationError
 from litletter.models import PaperSource
 from litletter.query import parse_query
@@ -446,6 +450,11 @@ def _parse_author_catalog(value: Any, config_path: Path) -> AuthorCatalog | None
         return None
     if not isinstance(value, str) or not value.strip():
         raise ConfigurationError("config.author_groups must be a non-empty path")
+    if value.startswith("builtin:"):
+        try:
+            return get_builtin_author_catalog(value.removeprefix("builtin:"))
+        except ValueError as exc:
+            raise ConfigurationError(f"config.author_groups is invalid: {exc}") from exc
     path = Path(value).expanduser()
     if not path.is_absolute():
         path = config_path.parent / path
@@ -462,7 +471,10 @@ def _author_group_fingerprint(
         return None
     if catalog is None:
         raise AssertionError("parsed author groups require a catalog")
-    definitions = {name: catalog.get(name).authors for name in sorted(group_names)}
+    definitions = {
+        name: [author.fingerprint() for author in catalog.get(name).authors]
+        for name in sorted(group_names)
+    }
     payload = json.dumps(definitions, sort_keys=True, separators=(",", ":"))
     return sha256(payload.encode()).hexdigest()[:16]
 

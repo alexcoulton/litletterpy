@@ -10,6 +10,7 @@ import httpx
 
 from litletter.errors import ResponseParseError
 from litletter.models import Author, Paper, PaperSource
+from litletter.query._authors import matches_author
 from litletter.sources._http import HttpRequester
 
 _LOGGER = logging.getLogger(__name__)
@@ -125,7 +126,11 @@ class _RxivClient:
         category = _optional_string(
             record.get("category"), source_name=self._display_name
         )
-        authors = _parse_authors(record.get("authors"), source_name=self._display_name)
+        authors = _parse_authors(
+            record.get("authors"),
+            corresponding=record.get("author_corresponding"),
+            source_name=self._display_name,
+        )
         version_suffix = f"v{version}" if version is not None else ""
         return Paper(
             source=self._source,
@@ -180,7 +185,12 @@ def _parse_rxiv_response(
     return records, total
 
 
-def _parse_authors(value: Any, *, source_name: str) -> tuple[Author, ...]:
+def _parse_authors(
+    value: Any,
+    *,
+    corresponding: Any = None,
+    source_name: str,
+) -> tuple[Author, ...]:
     if value is None:
         return ()
     if isinstance(value, str):
@@ -189,7 +199,26 @@ def _parse_authors(value: Any, *, source_name: str) -> tuple[Author, ...]:
         names = value
     else:
         raise ResponseParseError(f"{source_name} paper has an invalid authors field")
-    return tuple(Author(name=name.strip()) for name in names if name.strip())
+    authors = [Author(name=name.strip()) for name in names if name.strip()]
+    if corresponding is None:
+        return tuple(authors)
+    if not isinstance(corresponding, str):
+        raise ResponseParseError(
+            f"{source_name} paper has an invalid corresponding author"
+        )
+    full_name = " ".join(corresponding.split())
+    if not full_name:
+        return tuple(authors)
+    matching = [
+        index
+        for index, author in enumerate(authors)
+        if matches_author(author, full_name, phrase=True)
+    ]
+    if len(matching) == 1:
+        authors[matching[0]] = Author(full_name)
+    elif not matching:
+        authors.append(Author(full_name))
+    return tuple(authors)
 
 
 def _required_string(record: dict[str, Any], key: str) -> str:
