@@ -1,6 +1,7 @@
 {
   "version": 2,
   "database": "state/litletter.sqlite3",
+  "author_groups": "author_groups.json",
   "newsletter": {
     "title": "My Litletter",
     "from": "Litletter <newsletter@updates.example.com>",
@@ -50,7 +51,7 @@
     {
       "id": "author-watchlist",
       "name": "Author Watchlist",
-      "query": "author:('Ada Lovelace' OR 'Grace Hopper')",
+      "query": "author_group:watchlist",
       "sources": ["pubmed", "biorxiv", "medrxiv", "arxiv"]
     }
   ],

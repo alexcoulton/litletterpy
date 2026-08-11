@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from hashlib import sha256
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -14,6 +15,7 @@ from litletter.app_config import (
     PostmarkProviderConfig,
     ResendProviderConfig,
 )
+from litletter.author_groups import AuthorCatalog, load_author_catalog
 from litletter.errors import ConfigurationError
 from litletter.models import PaperSource
 from litletter.query import parse_query
@@ -78,6 +80,14 @@ class CategoryConfig:
     name: str
     query: str
     sources: tuple[PaperSource, ...]
+    query_fingerprint: str | None = None
+
+    @property
+    def stored_query(self) -> str:
+        """Return the query identity persisted for state invalidation."""
+        if self.query_fingerprint is None:
+            return self.query
+        return f"{self.query}\n# author-groups:{self.query_fingerprint}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +125,7 @@ class LitletterConfig:
     categories: tuple[CategoryConfig, ...]
     summarization: SummarizationConfig
     delivery: DeliveryConfig
+    author_catalog: AuthorCatalog | None = None
 
 
 def load_config(path: str | Path) -> LitletterConfig:
@@ -144,6 +155,7 @@ def parse_config(payload: Any, *, path: Path) -> LitletterConfig:
             "sources",
             "discovery",
             "categories",
+            "author_groups",
             "summarization",
             "delivery",
         },
@@ -161,8 +173,14 @@ def parse_config(payload: Any, *, path: Path) -> LitletterConfig:
     newsletter = _parse_newsletter(root.get("newsletter"))
     pubmed, biorxiv, medrxiv, arxiv = _parse_sources(root.get("sources"))
     discovery = _parse_discovery(root.get("discovery"))
+    author_catalog = _parse_author_catalog(root.get("author_groups"), path)
     categories = _parse_categories(
-        root.get("categories"), pubmed, biorxiv, medrxiv, arxiv
+        root.get("categories"),
+        pubmed,
+        biorxiv,
+        medrxiv,
+        arxiv,
+        author_catalog,
     )
     summarization = _parse_summarization(root.get("summarization", {}))
     delivery = _parse_delivery(root.get("delivery"))
@@ -178,6 +196,7 @@ def parse_config(payload: Any, *, path: Path) -> LitletterConfig:
         categories=categories,
         summarization=summarization,
         delivery=delivery,
+        author_catalog=author_catalog,
     )
 
 
@@ -191,6 +210,7 @@ def newsletter_config_template(
     return {
         "version": 2,
         "database": "state/litletter.sqlite3",
+        "author_groups": "author_groups.json",
         "newsletter": {
             "title": "My Litletter",
             "from": "Litletter <onboarding@resend.dev>",
@@ -366,6 +386,7 @@ def _parse_categories(
     biorxiv: BioRxivConfig,
     medrxiv: MedRxivConfig,
     arxiv: ArXivConfig,
+    author_catalog: AuthorCatalog | None,
 ) -> tuple[CategoryConfig, ...]:
     if not isinstance(value, list) or not value:
         raise ConfigurationError("categories must be a non-empty array")
@@ -385,7 +406,7 @@ def _parse_categories(
         seen.add(category_id)
         query = _string(raw, "query", location)
         try:
-            parse_query(query)
+            parsed_query = parse_query(query, author_catalog=author_catalog)
         except ValueError as exc:
             raise ConfigurationError(f"{location}.query is invalid: {exc}") from exc
 
@@ -412,9 +433,38 @@ def _parse_categories(
                 name=_string(raw, "name", location),
                 query=query,
                 sources=sources,
+                query_fingerprint=_author_group_fingerprint(
+                    parsed_query.author_groups, author_catalog
+                ),
             )
         )
     return tuple(categories)
+
+
+def _parse_author_catalog(value: Any, config_path: Path) -> AuthorCatalog | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigurationError("config.author_groups must be a non-empty path")
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        path = config_path.parent / path
+    try:
+        return load_author_catalog(path)
+    except ValueError as exc:
+        raise ConfigurationError(f"config.author_groups is invalid: {exc}") from exc
+
+
+def _author_group_fingerprint(
+    group_names: tuple[str, ...], catalog: AuthorCatalog | None
+) -> str | None:
+    if not group_names:
+        return None
+    if catalog is None:
+        raise AssertionError("parsed author groups require a catalog")
+    definitions = {name: catalog.get(name).authors for name in sorted(group_names)}
+    payload = json.dumps(definitions, sort_keys=True, separators=(",", ":"))
+    return sha256(payload.encode()).hexdigest()[:16]
 
 
 def _parse_delivery(value: Any) -> DeliveryConfig:

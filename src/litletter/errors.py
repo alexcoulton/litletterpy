@@ -56,6 +56,24 @@ class UnknownJournalGroupError(LitletterError, ValueError):
         super().__init__(detail)
 
 
+class AuthorCatalogError(LitletterError, ValueError):
+    """A user-supplied author group catalog is invalid."""
+
+
+class UnknownAuthorGroupError(LitletterError, ValueError):
+    """A query refers to an author group that is not defined."""
+
+    def __init__(self, name: str, available: tuple[str, ...] = ()) -> None:
+        self.name = name
+        self.available = available
+        detail = f"unknown author group '{name}'"
+        if available:
+            detail += f"; available groups: {', '.join(available)}"
+        else:
+            detail += "; configure an author_groups file"
+        super().__init__(detail)
+
+
 class ConfigurationError(LitletterError, ValueError):
     """A Litletter JSON configuration is invalid."""
 

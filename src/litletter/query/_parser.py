@@ -5,7 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum, auto
 
-from litletter.errors import QuerySyntaxError
+from litletter.author_groups import AuthorCatalog
+from litletter.errors import QuerySyntaxError, UnknownAuthorGroupError
 from litletter.query._ast import And, Expression, Field, Not, Or, Query, Term
 
 
@@ -35,14 +36,62 @@ _OPERATORS = {
 }
 
 
-def parse_query(text: str) -> Query:
+def parse_query(text: str, *, author_catalog: AuthorCatalog | None = None) -> Query:
     """Parse ``text`` into a reusable query.
 
     Operators are case-insensitive. Their precedence, from highest to lowest,
-    is ``NOT``, ``AND``, then ``OR``.
+    is ``NOT``, ``AND``, then ``OR``. Queries using ``author_group:`` require
+    the user-owned catalog that defines the referenced groups.
     """
     tokens = _Lexer(text).tokenize()
-    return _Parser(text, tokens).parse()
+    parsed = _Parser(text, tokens).parse()
+    groups: list[str] = []
+    root = _expand_author_groups(parsed.root, author_catalog, groups)
+    return Query(
+        text=parsed.text, root=root, author_groups=tuple(dict.fromkeys(groups))
+    )
+
+
+def _expand_author_groups(
+    expression: Expression,
+    catalog: AuthorCatalog | None,
+    groups: list[str],
+) -> Expression:
+    if isinstance(expression, Term):
+        if expression.field is not Field.AUTHOR_GROUP:
+            return expression
+        if catalog is None:
+            raise UnknownAuthorGroupError(expression.text)
+        group = catalog.get(expression.text)
+        groups.append(group.name)
+        terms = [
+            Term(author, field=Field.AUTHOR, phrase=True) for author in group.authors
+        ]
+        return _balanced_or(terms)
+    if isinstance(expression, Not):
+        return Not(_expand_author_groups(expression.operand, catalog, groups))
+    if isinstance(expression, And):
+        return And(
+            _expand_author_groups(expression.left, catalog, groups),
+            _expand_author_groups(expression.right, catalog, groups),
+        )
+    if isinstance(expression, Or):
+        return Or(
+            _expand_author_groups(expression.left, catalog, groups),
+            _expand_author_groups(expression.right, catalog, groups),
+        )
+    raise TypeError(f"unsupported query expression: {type(expression).__name__}")
+
+
+def _balanced_or(expressions: list[Expression]) -> Expression:
+    """Combine a large collection without creating a recursion-heavy AST."""
+    if len(expressions) == 1:
+        return expressions[0]
+    midpoint = len(expressions) // 2
+    return Or(
+        _balanced_or(expressions[:midpoint]),
+        _balanced_or(expressions[midpoint:]),
+    )
 
 
 class _Lexer:

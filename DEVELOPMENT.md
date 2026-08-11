@@ -174,7 +174,7 @@ running concurrently.
 The sample [`litletter.service`](deploy/litletter.service) and
 [`litletter.timer`](deploy/litletter.timer) use a persistent systemd timer, so a
 run missed while the server was offline starts after it returns. Adapt their
-paths, copy the two JSON files to `/etc/litletter/`, use
+paths, copy the three JSON files to `/etc/litletter/`, use
 `/var/lib/litletter/litletter.sqlite3` as the database, and store secrets in a
 root-owned environment file based on
 [`litletter.env.example`](deploy/litletter.env.example). Then install and enable
@@ -276,7 +276,7 @@ The language supports:
 - Parentheses, with precedence `NOT`, then `AND`, then `OR`.
 - Phrases in single or double quotes. Double-quoted phrases accept `\"` and
   `\\` escapes; single-quoted phrases accept `\'` and `\\` escapes.
-- `title:`, `abstract:`, `title_abstract:`, `author:`, `journal:`,
+- `title:`, `abstract:`, `title_abstract:`, `author:`, `author_group:`, `journal:`,
   `journal_group:`, `category:`, and `publication_type:` field prefixes.
 - Field-scoped groups such as `title:(cancer OR tumour)`.
 
@@ -295,6 +295,15 @@ single-word author terms are evaluated locally from date-bounded candidates.
 When a source supplies only a given-name initial, people sharing the same
 family name and initial cannot be distinguished; use an ORCID in the
 `author:` query when that source provides one.
+
+Long author watchlists belong in the user-owned `author_groups.json` referenced
+by the newsletter config. A group contains an `authors` array of full names or
+ORCIDs and may compose other groups with `includes`. The query
+`author_group:watchlist` expands the named collection into ordinary quoted
+`author:` terms before upstream candidate compilation and local evaluation.
+This keeps matching semantics identical across PubMed, bioRxiv, medRxiv, and
+arXiv. A fingerprint of each referenced collection is persisted with the
+category query so changing a list clears stale unsent memberships.
 
 `publication_type:original_research` retains research articles and bioRxiv
 preprints while excluding PubMed reviews, systematic reviews, meta-analyses,

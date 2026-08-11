@@ -18,6 +18,7 @@ class Field(StrEnum):
     JOURNAL_GROUP = "journal_group"
     CATEGORY = "category"
     AUTHOR = "author"
+    AUTHOR_GROUP = "author_group"
     PUBLICATION_TYPE = "publication_type"
 
 
@@ -67,6 +68,7 @@ class Query:
 
     text: str
     root: Expression
+    author_groups: tuple[str, ...] = ()
 
     def matches(self, paper: Paper) -> bool:
         """Return whether ``paper`` satisfies this query."""

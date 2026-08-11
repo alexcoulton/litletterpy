@@ -14,12 +14,14 @@ def category(
     category_id: str = "nsc-cancer",
     *,
     query: str = "cancer",
+    query_fingerprint: str | None = None,
 ) -> CategoryConfig:
     return CategoryConfig(
         id=category_id,
         name="NSC Cancer",
         query=query,
         sources=(PaperSource.PUBMED,),
+        query_fingerprint=query_fingerprint,
     )
 
 
@@ -102,6 +104,23 @@ def test_changed_category_query_discards_old_unsent_memberships(tmp_path: Path) 
     database.save_matches("nsc-cancer", [paper()], run_id=run_id)
 
     database.sync_categories([category(query="oncology")])
+
+    assert database.unsent_papers() == []
+    database.close()
+
+
+def test_changed_author_group_discards_old_unsent_memberships(tmp_path: Path) -> None:
+    database = Database(tmp_path / "litletter.sqlite3")
+    database.initialize()
+    database.sync_categories(
+        [category(query="author_group:watchlist", query_fingerprint="first")]
+    )
+    run_id = database.start_run(date(2026, 8, 9), date(2026, 8, 9))
+    database.save_matches("nsc-cancer", [paper()], run_id=run_id)
+
+    database.sync_categories(
+        [category(query="author_group:watchlist", query_fingerprint="second")]
+    )
 
     assert database.unsent_papers() == []
     database.close()

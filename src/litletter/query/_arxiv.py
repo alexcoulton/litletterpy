@@ -53,6 +53,8 @@ def _compile_term(term: Term) -> str | None:
         if family_name is None:
             return None
         return f"au:{family_name.replace(' ', '_')}"
+    if term.field is Field.AUTHOR_GROUP:
+        raise AssertionError("author groups must be expanded while parsing")
     if term.field is Field.CATEGORY:
         return f"cat:{term.text}" if _CATEGORY.fullmatch(term.text) else None
     if term.field in {

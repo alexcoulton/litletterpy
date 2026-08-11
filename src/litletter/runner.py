@@ -8,6 +8,7 @@ from dataclasses import dataclass, replace
 from datetime import date, timedelta
 from typing import Protocol
 
+from litletter.author_groups import AuthorCatalog
 from litletter.config import CategoryConfig, LitletterConfig
 from litletter.delivery import DeliveryReceipt, Mailer
 from litletter.discovery import discover_papers
@@ -161,6 +162,7 @@ def run_once(
             biorxiv=biorxiv,
             medrxiv=medrxiv,
             arxiv=arxiv,
+            author_catalog=config.author_catalog,
         )
         items = database.unsent_papers()
         if not items:
@@ -251,6 +253,7 @@ def discover_categories(
     biorxiv: DateSource | None,
     medrxiv: DateSource | None,
     arxiv: ArXivSource | None,
+    author_catalog: AuthorCatalog | None = None,
 ) -> int:
     """Discover every category, fetching date-feed sources once per run."""
     date_sources = {
@@ -282,12 +285,13 @@ def discover_categories(
                 since=since,
                 until=until,
                 pubmed=pubmed,
+                author_catalog=author_catalog,
             ):
                 matches[(paper.source, paper.source_id)] = paper
         for source in (PaperSource.BIORXIV, PaperSource.MEDRXIV):
             if source not in category.sources:
                 continue
-            query = parse_query(category.query)
+            query = parse_query(category.query, author_catalog=author_catalog)
             for paper in filter_papers(date_candidates[source], query):
                 matches[(paper.source, paper.source_id)] = paper
         if PaperSource.ARXIV in category.sources:
@@ -298,6 +302,7 @@ def discover_categories(
                 since=since,
                 until=until,
                 arxiv=arxiv,
+                author_catalog=author_catalog,
             ):
                 matches[(paper.source, paper.source_id)] = paper
         ordered = sorted(

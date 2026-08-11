@@ -7,6 +7,7 @@ from collections.abc import Iterable
 from datetime import date
 from typing import Protocol
 
+from litletter.author_groups import AuthorCatalog
 from litletter.models import Paper
 from litletter.query import (
     Query,
@@ -72,6 +73,7 @@ def discover_papers(
     max_biorxiv_candidates: int | None = None,
     max_medrxiv_candidates: int | None = None,
     max_arxiv_candidates: int | None = None,
+    author_catalog: AuthorCatalog | None = None,
 ) -> list[Paper]:
     """Fetch and locally match papers from the supplied source clients.
 
@@ -87,7 +89,11 @@ def discover_papers(
     _validate_limit("max_medrxiv_candidates", max_medrxiv_candidates)
     _validate_limit("max_arxiv_candidates", max_arxiv_candidates)
 
-    parsed = parse_query(query) if isinstance(query, str) else query
+    parsed = (
+        parse_query(query, author_catalog=author_catalog)
+        if isinstance(query, str)
+        else query
+    )
     source_names = [
         name
         for name, client in (

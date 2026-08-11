@@ -118,3 +118,37 @@ def test_medrxiv_and_arxiv_categories_are_supported_when_enabled() -> None:
         PaperSource.MEDRXIV,
         PaperSource.ARXIV,
     )
+
+
+def test_config_loads_relative_author_groups_and_fingerprints_query(
+    tmp_path: Path,
+) -> None:
+    groups = tmp_path / "author_groups.json"
+    groups.write_text(
+        '{"version":1,"groups":{"watchlist":{"authors":["Alex Coulton"]}}}',
+        encoding="utf-8",
+    )
+    payload = config_payload()
+    payload["author_groups"] = "author_groups.json"
+    payload["categories"][0]["query"] = "author_group:watchlist"
+
+    config = parse_config(payload, path=tmp_path / "litletter.json")
+
+    assert config.author_catalog is not None
+    assert config.author_catalog.path == groups
+    assert config.categories[0].query_fingerprint is not None
+    assert "# author-groups:" in config.categories[0].stored_query
+
+
+def test_config_rejects_unknown_author_group(tmp_path: Path) -> None:
+    groups = tmp_path / "author_groups.json"
+    groups.write_text(
+        '{"version":1,"groups":{"watchlist":{"authors":["Alex Coulton"]}}}',
+        encoding="utf-8",
+    )
+    payload = config_payload()
+    payload["author_groups"] = "author_groups.json"
+    payload["categories"][0]["query"] = "author_group:missing"
+
+    with pytest.raises(ConfigurationError, match="unknown author group 'missing'"):
+        parse_config(payload, path=tmp_path / "litletter.json")

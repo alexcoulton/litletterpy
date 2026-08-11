@@ -70,6 +70,8 @@ def _compile_term(term: Term) -> str | None:
         if family_name is None:
             return None
         return f'"{family_name}"[Author]'
+    if term.field is Field.AUTHOR_GROUP:
+        raise AssertionError("author groups must be expanded while parsing")
     if term.field is Field.CATEGORY:
         return None
     tokens = _SEARCH_TOKEN.findall(term.text)

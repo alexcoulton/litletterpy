@@ -7,6 +7,7 @@ from datetime import date
 import pytest
 
 from litletter import Paper, PaperSource, discover_papers
+from litletter.author_groups import _parse_catalog
 from litletter.query import compile_pubmed_candidate_query, parse_query
 
 
@@ -118,6 +119,20 @@ class FakeBioRxiv:
 def test_compile_pubmed_candidate_query(query: str, expected: str | None) -> None:
     assert compile_pubmed_candidate_query(query) == expected
     assert compile_pubmed_candidate_query(parse_query(query)) == expected
+
+
+def test_author_group_compiles_to_pubmed_author_selector() -> None:
+    catalog = _parse_catalog(
+        {
+            "version": 1,
+            "groups": {"watchlist": {"authors": ["Alex Coulton", "Jane Smith"]}},
+        }
+    )
+    query = parse_query("author_group:watchlist", author_catalog=catalog)
+
+    assert compile_pubmed_candidate_query(query) == (
+        '("coulton"[Author] OR "smith"[Author])'
+    )
 
 
 def test_discovery_fetches_both_sources_then_filters_and_sorts() -> None:

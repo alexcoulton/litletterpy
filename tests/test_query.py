@@ -6,6 +6,8 @@ from datetime import date
 import pytest
 
 from litletter import QuerySyntaxError
+from litletter.author_groups import _parse_catalog
+from litletter.errors import UnknownAuthorGroupError
 from litletter.models import Author, Paper, PaperSource
 from litletter.query import And, Field, Not, Or, Term, filter_papers, parse_query
 
@@ -200,6 +202,47 @@ def test_author_watchlist_can_bypass_only_the_journal_filter() -> None:
             authors=(Author("Alex Coulton"),),
         )
     )
+
+
+def test_author_group_expands_a_named_watchlist() -> None:
+    catalog = _parse_catalog(
+        {
+            "version": 1,
+            "groups": {
+                "watchlist": {"authors": ["Alex Coulton", "0000-0001-2345-6789"]}
+            },
+        }
+    )
+    query = parse_query("author_group:watchlist", author_catalog=catalog)
+
+    assert query.author_groups == ("watchlist",)
+    assert query.matches(paper("Paper", authors=(Author("Alex B. Coulton"),)))
+    assert query.matches(
+        paper(
+            "Paper",
+            authors=(Author("Different Name", "0000-0001-2345-6789"),),
+        )
+    )
+    assert not query.matches(paper("Paper", authors=(Author("Jane Smith"),)))
+
+
+def test_author_group_requires_a_configured_catalog() -> None:
+    with pytest.raises(UnknownAuthorGroupError, match="configure an author_groups"):
+        parse_query("author_group:watchlist")
+
+
+def test_large_author_group_uses_a_balanced_expression_tree() -> None:
+    authors = [f"Person {index}" for index in range(2_000)]
+    catalog = _parse_catalog(
+        {
+            "version": 1,
+            "groups": {"large": {"authors": authors}},
+        }
+    )
+
+    query = parse_query("author_group:large", author_catalog=catalog)
+
+    assert query.matches(paper("Paper", authors=(Author("Person 1999"),)))
 
 
 def test_publication_type_supports_original_research_filter() -> None:

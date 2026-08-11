@@ -131,6 +131,7 @@ def test_init_creates_complete_starter_without_overwriting(
 
     newsletter = json.loads(config.read_text())
     assert newsletter["delivery"] == {"provider": "resend-default"}
+    assert newsletter["author_groups"] == "author_groups.json"
     assert (
         "publication_type:original_research" in (newsletter["categories"][0]["query"])
     )
@@ -139,6 +140,8 @@ def test_init_creates_complete_starter_without_overwriting(
     assert newsletter["sources"]["arxiv"] == {"enabled": False}
     assert app_config.stat().st_mode & 0o777 == 0o600
     assert (config.parent / "state" / "litletter.sqlite3").exists()
+    author_groups = config.parent / "author_groups.json"
+    assert json.loads(author_groups.read_text())["groups"]["watchlist"]["authors"]
     assert "Next: edit the email addresses" in capsys.readouterr().out
 
     original = config.read_text()

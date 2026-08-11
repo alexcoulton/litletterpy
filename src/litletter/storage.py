@@ -276,7 +276,7 @@ class Database:
                 previous = self.connection.execute(
                     "SELECT query FROM categories WHERE id = ?", (category.id,)
                 ).fetchone()
-                if previous is not None and previous[0] != category.query:
+                if previous is not None and previous[0] != category.stored_query:
                     self.connection.execute(
                         "DELETE FROM paper_categories WHERE category_id = ?",
                         (category.id,),
@@ -294,7 +294,13 @@ class Database:
                         active = 1,
                         updated_at = excluded.updated_at
                     """,
-                    (category.id, category.name, category.query, position, now),
+                    (
+                        category.id,
+                        category.name,
+                        category.stored_query,
+                        position,
+                        now,
+                    ),
                 )
 
     def start_run(self, since: date, until: date) -> int:

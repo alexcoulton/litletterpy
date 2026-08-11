@@ -22,6 +22,7 @@ from litletter.app_config import (
     default_app_config_path,
     load_app_config,
 )
+from litletter.author_groups import author_catalog_template
 from litletter.config import (
     LitletterConfig,
     load_config,
@@ -218,8 +219,13 @@ def _initialize(args: argparse.Namespace) -> int:
     if config_path.exists():
         raise ConfigurationError(f"newsletter config already exists: {config_path}")
     database_path = config_path.parent / "state" / "litletter.sqlite3"
+    author_groups_path = config_path.parent / "author_groups.json"
     if database_path.exists():
         raise ConfigurationError(f"starter database already exists: {database_path}")
+    if author_groups_path.exists():
+        raise ConfigurationError(
+            f"starter author groups already exist: {author_groups_path}"
+        )
 
     if app_path.exists():
         app_config = load_app_config(app_path)
@@ -245,6 +251,12 @@ def _initialize(args: argparse.Namespace) -> int:
         app_config.mailers[0],
     )
     _write_json_exclusive(
+        author_groups_path,
+        author_catalog_template(),
+        mode=0o644,
+        kind="author groups",
+    )
+    _write_json_exclusive(
         config_path,
         newsletter_config_template(
             pubmed_provider=pubmed_provider,
@@ -266,6 +278,7 @@ def _initialize(args: argparse.Namespace) -> int:
         database.close()
 
     print(f"Created newsletter config: {config_path}")
+    print(f"Created author groups: {author_groups_path}")
     print(app_message)
     print(f"Initialized database: {config.database}")
     credential = (

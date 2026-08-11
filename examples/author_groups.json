@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "groups": {
+    "watchlist": {
+      "description": "Authors whose new papers I always want to see",
+      "authors": [
+        "Ada Lovelace",
+        "Grace Hopper",
+        "0000-0001-2345-6789"
+      ]
+    },
+    "cancer-researchers": {
+      "description": "A reusable specialist subset",
+      "authors": [
+        "Jane Smith",
+        "Alex Coulton"
+      ]
+    },
+    "combined-watchlist": {
+      "description": "The main watchlist plus the cancer group",
+      "includes": [
+        "watchlist",
+        "cancer-researchers"
+      ]
+    }
+  }
+}

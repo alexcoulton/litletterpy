@@ -10,7 +10,7 @@ For reliable automatic delivery, run Litletter on an always-on machine such as
 a cheap VPS, a home server, or an institutional compute cluster. A scheduler
 runs `litletter run` once each day; Litletter does not need to remain running
 between deliveries. It needs only outbound internet access and persistent
-storage for its two JSON files and SQLite database.
+storage for its JSON files and SQLite database.
 
 You can test Litletter on a laptop, but scheduled delivery will happen only
 while that laptop is awake. The daily scheduling examples are covered below.
@@ -38,9 +38,10 @@ uv tool install . && litletter init
 ```
 
 Run this command in the folder where you want to keep your newsletter. It
-creates three files:
+creates four files:
 
 - `./litletter.json` — newsletter addresses, categories, and behavior
+- `./author_groups.json` — named author watchlists
 - `~/.config/litletter/app.json` — PubMed, Resend, and optional DeepSeek
   credentials
 - `./state/litletter.sqlite3` — delivery history and cached papers
@@ -133,6 +134,7 @@ quotes. The most useful search fields are:
   corrections, and other non-research material
 - `category:` for a bioRxiv, medRxiv, or arXiv subject category
 - `author:` for an author name or ORCID
+- `author_group:` for a named list in `./author_groups.json`
 
 For example:
 
@@ -156,19 +158,37 @@ shown only once, under its first match.
 
 ## Add an author watchlist
 
-An author watchlist is an ordinary category whose query uses `author:`. List
-full names in quotes and separate them with `OR`:
+Keep long, reusable author lists in `./author_groups.json`. Each entry may be a
+full name or an ORCID:
+
+```json
+{
+  "version": 1,
+  "groups": {
+    "watchlist": {
+      "description": "Authors whose new papers I always want to see",
+      "authors": [
+        "Ada Lovelace",
+        "Grace Hopper",
+        "0000-0001-2345-6789"
+      ]
+    }
+  }
+}
+```
+
+Reference the whole list with `author_group:` in a newsletter category:
 
 ```json
 {
   "id": "author-watchlist",
   "name": "Author Watchlist",
-  "query": "author:('Ada Lovelace' OR 'Grace Hopper')",
+  "query": "author_group:watchlist",
   "sources": ["pubmed", "biorxiv", "medrxiv", "arxiv"]
 }
 ```
 
-Every new paper by either author is included in that section, regardless of
+Every new paper by any listed author is included in that section, regardless of
 journal or topic. Names are case-insensitive, and matching tolerates middle
 initials and source formats such as `Lovelace, A.`.
 
@@ -177,8 +197,12 @@ journal restriction, put the journal and author clauses in the same group:
 
 ```text
 title_abstract:cancer AND
-(journal_group:flagship_nsc OR author:('Ada Lovelace' OR 'Grace Hopper'))
+(journal_group:flagship_nsc OR author_group:watchlist)
 ```
+
+Groups can reuse other groups with an `"includes"` array. For a short ad hoc
+list, `author:('Ada Lovelace' OR 'Grace Hopper')` remains available. Editing a
+referenced group automatically invalidates stale, unsent category matches.
 
 ## Preview and send
 
@@ -260,4 +284,6 @@ so delivery retries do not call the model again.
   fetching behavior, delivery recovery, the Python API, and development.
 - [`examples/litletter.json`](examples/litletter.json) is a complete newsletter
   configuration.
+- [`examples/author_groups.json`](examples/author_groups.json) demonstrates
+  reusable author lists and included groups.
 - [`examples/app.json`](examples/app.json) shows all provider profiles.

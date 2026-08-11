@@ -5,6 +5,7 @@ from datetime import date
 import httpx
 import pytest
 
+from litletter.author_groups import _parse_catalog
 from litletter.errors import ResponseParseError
 from litletter.models import PaperSource
 from litletter.query import compile_arxiv_candidate_query, parse_query
@@ -89,6 +90,18 @@ _THIRD_ENTRY = """\
 def test_compile_arxiv_candidate_query(query: str, expected: str | None) -> None:
     assert compile_arxiv_candidate_query(query) == expected
     assert compile_arxiv_candidate_query(parse_query(query)) == expected
+
+
+def test_author_group_compiles_to_arxiv_author_selector() -> None:
+    catalog = _parse_catalog(
+        {
+            "version": 1,
+            "groups": {"watchlist": {"authors": ["Alex Coulton", "Jane Smith"]}},
+        }
+    )
+    query = parse_query("author_group:watchlist", author_catalog=catalog)
+
+    assert compile_arxiv_candidate_query(query) == "(au:coulton OR au:smith)"
 
 
 def test_search_paginates_and_normalizes_atom_entries() -> None:

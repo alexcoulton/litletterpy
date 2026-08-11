@@ -57,6 +57,8 @@ def _evaluate(expression: Expression, text: _PaperText, paper: Paper) -> bool:
                 )
                 for author in paper.authors
             )
+        if expression.field is Field.AUTHOR_GROUP:
+            raise AssertionError("author groups must be expanded while parsing")
         return any(
             _contains(value, expression.text, phrase=expression.phrase)
             for value in _field_values(expression.field, text, paper)
