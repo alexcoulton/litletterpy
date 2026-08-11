@@ -20,9 +20,6 @@
     },
     "medrxiv": {
       "enabled": true
-    },
-    "arxiv": {
-      "enabled": true
     }
   },
   "discovery": {
@@ -58,7 +55,7 @@
       "id": "cancer-researcher-watchlist",
       "name": "Cancer Researcher Watchlist",
       "query": "author_group:cancer-watchlist",
-      "sources": ["pubmed", "biorxiv", "medrxiv", "arxiv"]
+      "sources": ["pubmed", "biorxiv", "medrxiv"]
     }
   ],
   "summarization": {

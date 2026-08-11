@@ -83,7 +83,7 @@ unique ID, a heading, a search query, and the sources to search:
 For a complete ready-to-edit configuration, see
 [`examples/litletter.json`](examples/litletter.json). It mirrors a practical
 cancer newsletter with several PubMed searches and a curated author watchlist
-covering PubMed, bioRxiv, medRxiv, and arXiv; all personal addresses have been
+covering PubMed, bioRxiv, and medRxiv; all personal addresses have been
 replaced with placeholders.
 
 ```json
