@@ -107,9 +107,13 @@ useful search fields are:
 For example:
 
 ```text
-title_abstract:(cancer OR tumour) AND NOT title:review
+title_abstract:cancer OR title_abstract:tumour
+(title_abstract:cancer OR title_abstract:tumour) AND NOT title:review
 title:"spatial transcriptomics" AND journal_group:nature_portfolio
 ```
+
+Use parentheses around the `OR` alternatives when combining them with another
+condition. The shorter `title_abstract:(cancer OR tumour)` syntax is equivalent.
 
 Categories appear in the order listed. A paper matching several categories is
 shown only once, under its first match. If you add a bioRxiv category, also set
