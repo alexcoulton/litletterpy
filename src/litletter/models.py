@@ -16,6 +16,14 @@ class PaperSource(StrEnum):
     ARXIV = "arxiv"
 
 
+class ResearchStatus(StrEnum):
+    """How confidently source metadata identifies a paper as research."""
+
+    ORIGINAL = "original"
+    NON_RESEARCH = "non_research"
+    UNCERTAIN = "uncertain"
+
+
 @dataclass(frozen=True, slots=True)
 class Author:
     """A normalized paper author."""
@@ -58,18 +66,25 @@ class Paper:
             raise ValueError("paper URL must not be empty")
 
     @property
-    def is_original_research(self) -> bool:
-        """Return whether source metadata identifies an original research work."""
+    def research_status(self) -> ResearchStatus:
+        """Classify the paper using source-supplied publication metadata."""
         if self.source in {
             PaperSource.BIORXIV,
             PaperSource.MEDRXIV,
             PaperSource.ARXIV,
         }:
-            return True
+            return ResearchStatus.ORIGINAL
         normalized = {value.casefold().strip() for value in self.publication_types}
         if normalized & _NON_RESEARCH_PUBLICATION_TYPES:
-            return False
-        return bool(normalized & _ORIGINAL_RESEARCH_PUBLICATION_TYPES)
+            return ResearchStatus.NON_RESEARCH
+        if normalized & _ORIGINAL_RESEARCH_PUBLICATION_TYPES:
+            return ResearchStatus.ORIGINAL
+        return ResearchStatus.UNCERTAIN
+
+    @property
+    def is_original_research(self) -> bool:
+        """Apply the conservative research filter, retaining uncertain papers."""
+        return self.research_status is not ResearchStatus.NON_RESEARCH
 
 
 _ORIGINAL_RESEARCH_PUBLICATION_TYPES = {
@@ -84,7 +99,6 @@ _ORIGINAL_RESEARCH_PUBLICATION_TYPES = {
     "comparative study",
     "controlled clinical trial",
     "evaluation study",
-    "journal article",
     "multicenter study",
     "observational study",
     "observational study, veterinary",

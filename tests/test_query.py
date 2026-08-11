@@ -8,7 +8,7 @@ import pytest
 from litletter import QuerySyntaxError
 from litletter.author_groups import _parse_catalog
 from litletter.errors import UnknownAuthorGroupError
-from litletter.models import Author, Paper, PaperSource
+from litletter.models import Author, Paper, PaperSource, ResearchStatus
 from litletter.query import And, Field, Not, Or, Term, filter_papers, parse_query
 
 
@@ -318,7 +318,12 @@ def test_large_author_group_uses_a_balanced_expression_tree() -> None:
 def test_publication_type_supports_original_research_filter() -> None:
     query = parse_query("publication_type:original_research")
 
-    assert query.matches(paper("Experiment", publication_types=("Journal Article",)))
+    generic = paper("Experiment", publication_types=("Journal Article",))
+    assert generic.research_status is ResearchStatus.UNCERTAIN
+    assert query.matches(generic)
+    missing = paper("Unclassified experiment")
+    assert missing.research_status is ResearchStatus.UNCERTAIN
+    assert query.matches(missing)
     assert query.matches(
         paper(
             "Trial",
@@ -329,7 +334,19 @@ def test_publication_type_supports_original_research_filter() -> None:
         paper("Review", publication_types=("Journal Article", "Review"))
     )
     assert not query.matches(paper("News item", publication_types=("News",)))
-    assert query.matches(paper("Preprint", source=PaperSource.BIORXIV))
+    preprint = paper("Preprint", source=PaperSource.BIORXIV)
+    assert preprint.research_status is ResearchStatus.ORIGINAL
+    assert query.matches(preprint)
+
+
+def test_explicit_non_research_type_wins_over_research_metadata() -> None:
+    candidate = paper(
+        "Comment on a trial",
+        publication_types=("Randomized Controlled Trial", "Comment"),
+    )
+
+    assert candidate.research_status is ResearchStatus.NON_RESEARCH
+    assert not parse_query("publication_type:original_research").matches(candidate)
 
 
 def test_publication_type_can_match_exact_pubmed_type() -> None:

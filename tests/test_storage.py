@@ -40,6 +40,7 @@ def paper(source_id: str = "1") -> Paper:
         journal_abbreviation="Nature",
         journal_nlm_id="0410462",
         journal_issns=("1476-4687",),
+        publication_types=("Journal Article", "Comparative Study"),
     )
 
 
@@ -57,6 +58,10 @@ def test_database_tracks_runs_matches_and_global_delivery_deduplication(
     pending = database.unsent_papers()
     assert len(pending) == 1
     assert pending[0].paper.authors[0].orcid == "0000-0001-2345-6789"
+    assert pending[0].paper.publication_types == (
+        "Journal Article",
+        "Comparative Study",
+    )
     assert pending[0].category_ids == ("nsc-cancer",)
     assert database.last_successful_until() == date(2026, 8, 9)
 
@@ -217,18 +222,39 @@ def test_database_caches_summaries_by_full_identity(tmp_path: Path) -> None:
     database.close()
 
 
-def test_database_migrates_schema_one_to_summary_cache(tmp_path: Path) -> None:
+def test_database_migrates_schema_one_to_current(tmp_path: Path) -> None:
     path = tmp_path / "litletter.sqlite3"
     database = Database(path)
     database.initialize()
     database.close()
     with sqlite3.connect(path) as connection:
         connection.execute("DROP TABLE paper_summaries")
+        connection.execute("ALTER TABLE papers DROP COLUMN publication_types_json")
         connection.execute("PRAGMA user_version = 1")
 
     database = Database(path)
     database.initialize()
 
-    assert database.connection.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert database.connection.execute("PRAGMA user_version").fetchone()[0] == 3
     assert database.status().cached_summaries == 0
+    database.close()
+
+
+def test_database_migrates_schema_two_to_publication_types(tmp_path: Path) -> None:
+    path = tmp_path / "litletter.sqlite3"
+    database = Database(path)
+    database.initialize()
+    database.close()
+    with sqlite3.connect(path) as connection:
+        connection.execute("ALTER TABLE papers DROP COLUMN publication_types_json")
+        connection.execute("PRAGMA user_version = 2")
+
+    database = Database(path)
+    database.initialize()
+
+    columns = {
+        row[1] for row in database.connection.execute("PRAGMA table_info(papers)")
+    }
+    assert database.connection.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert "publication_types_json" in columns
     database.close()

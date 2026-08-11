@@ -312,12 +312,14 @@ This keeps matching semantics identical across PubMed, bioRxiv, medRxiv, and
 arXiv. A fingerprint of each referenced collection is persisted with the
 category query so changing a list clears stale unsent memberships.
 
-`publication_type:original_research` retains research articles and bioRxiv
-preprints while excluding PubMed reviews, systematic reviews, meta-analyses,
-news, editorials, comments, letters, corrections, retractions, guidelines, and
-other non-research formats. PubMed filtering uses controlled publication-type
-metadata rather than title keywords. Exact types can also be searched, for
-example `publication_type:"Randomized Controlled Trial"`.
+`publication_type:original_research` retains preprints and records with explicit
+research metadata while excluding PubMed reviews, systematic reviews,
+meta-analyses, news, editorials, comments, letters, corrections, retractions,
+guidelines, and other formats that PubMed explicitly marks as non-research. A
+generic `Journal Article`, an unknown type, or missing metadata is classified as
+uncertain and retained; this favors recall when PubMed omits a more specific
+publication type. Exact types can also be searched, for example
+`publication_type:"Randomized Controlled Trial"`.
 
 ### Journals and journal groups
 

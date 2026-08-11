@@ -16,7 +16,7 @@ from litletter.errors import (
     UnknownJournalGroupError,
 )
 from litletter.journals import JournalCatalog, JournalGroup, get_journal_catalog
-from litletter.models import Author, Paper, PaperSource
+from litletter.models import Author, Paper, PaperSource, ResearchStatus
 from litletter.query import Query, filter_papers, parse_query
 
 __all__ = [
@@ -32,6 +32,7 @@ __all__ = [
     "PaperSource",
     "Query",
     "QuerySyntaxError",
+    "ResearchStatus",
     "UnknownAuthorGroupError",
     "UnknownJournalGroupError",
     "discover_papers",

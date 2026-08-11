@@ -130,8 +130,10 @@ quotes. The most useful search fields are:
 - `journal_group:` for built-in collections such as `flagship_nsc`,
   `nature_portfolio`, `science_family`, `cell_press`, and
   `nature_index_current`
-- `publication_type:original_research` to exclude reviews, news, editorials,
-  corrections, and other non-research material
+- `publication_type:original_research` to exclude records that PubMed explicitly
+  identifies as reviews, news, editorials, comments, corrections, or another
+  non-research format. Generic or missing classifications are retained so that
+  incomplete metadata does not hide potentially relevant research.
 - `category:` for a bioRxiv, medRxiv, or arXiv subject category
 - `author:` for an author name or ORCID
 - `author_group:` for a named list in `./author_groups.json`

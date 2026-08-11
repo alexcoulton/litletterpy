@@ -14,7 +14,7 @@ from litletter.errors import DatabaseError
 from litletter.models import Author, Paper, PaperSource
 from litletter.summarization import PaperSummary, SummaryResult
 
-_SCHEMA_VERSION = 2
+_SCHEMA_VERSION = 3
 _SCHEMA = """
 CREATE TABLE runs (
     id INTEGER PRIMARY KEY,
@@ -53,6 +53,7 @@ CREATE TABLE papers (
     journal_issns_json TEXT NOT NULL,
     first_seen_at TEXT NOT NULL,
     last_seen_at TEXT NOT NULL,
+    publication_types_json TEXT NOT NULL,
     PRIMARY KEY (source, source_id)
 );
 
@@ -164,6 +165,11 @@ CREATE INDEX idx_paper_summaries_paper
     ON paper_summaries(paper_source, paper_source_id);
 """
 
+_MIGRATION_2_TO_3 = """
+ALTER TABLE papers
+ADD COLUMN publication_types_json TEXT NOT NULL DEFAULT '[]';
+"""
+
 
 @dataclass(frozen=True, slots=True)
 class PendingPaper:
@@ -244,17 +250,24 @@ class Database:
                     self.connection.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
             except sqlite3.Error as exc:
                 raise DatabaseError(f"could not initialize database: {exc}") from exc
-        elif version == 1:
+        else:
             try:
-                with self.connection:
-                    self.connection.executescript(_MIGRATION_1_TO_2)
-                    self.connection.execute("PRAGMA user_version = 2")
+                if version == 1:
+                    with self.connection:
+                        self.connection.executescript(_MIGRATION_1_TO_2)
+                        self.connection.execute("PRAGMA user_version = 2")
+                    version = 2
+                if version == 2:
+                    with self.connection:
+                        self.connection.executescript(_MIGRATION_2_TO_3)
+                        self.connection.execute("PRAGMA user_version = 3")
+                    version = 3
             except sqlite3.Error as exc:
                 raise DatabaseError(f"could not migrate database: {exc}") from exc
-        elif version != _SCHEMA_VERSION:
-            raise DatabaseError(
-                f"unsupported database schema {version}; expected {_SCHEMA_VERSION}"
-            )
+            if version != _SCHEMA_VERSION:
+                raise DatabaseError(
+                    f"unsupported database schema {version}; expected {_SCHEMA_VERSION}"
+                )
 
     def close(self) -> None:
         if self._connection is not None:
@@ -419,7 +432,7 @@ class Database:
             key = (row[0], row[1])
             if key not in grouped:
                 grouped[key] = (_paper_from_row(row), [])
-            grouped[key][1].append((int(row[18]), str(row[17])))
+            grouped[key][1].append((int(row[19]), str(row[18])))
         return [
             PendingPaper(
                 paper=paper,
@@ -746,8 +759,8 @@ class Database:
                 source, source_id, title, abstract, authors_json,
                 published_at, updated_at, doi, url, journal, category, version,
                 journal_abbreviation, journal_nlm_id, journal_issns_json,
-                first_seen_at, last_seen_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                first_seen_at, last_seen_at, publication_types_json
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(source, source_id) DO UPDATE SET
                 title = excluded.title,
                 abstract = excluded.abstract,
@@ -762,6 +775,7 @@ class Database:
                 journal_abbreviation = excluded.journal_abbreviation,
                 journal_nlm_id = excluded.journal_nlm_id,
                 journal_issns_json = excluded.journal_issns_json,
+                publication_types_json = excluded.publication_types_json,
                 last_seen_at = excluded.last_seen_at
             """,
             (
@@ -787,6 +801,7 @@ class Database:
                 json.dumps(paper.journal_issns),
                 now,
                 now,
+                json.dumps(paper.publication_types),
             ),
         )
 
@@ -809,6 +824,7 @@ def _paper_from_row(row: sqlite3.Row | tuple[object, ...]) -> Paper:
         journal_abbreviation=str(row[12]) if row[12] is not None else None,
         journal_nlm_id=str(row[13]) if row[13] is not None else None,
         journal_issns=tuple(json.loads(str(row[14]))),
+        publication_types=tuple(json.loads(str(row[17]))),
     )
 
 
