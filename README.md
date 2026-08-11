@@ -17,28 +17,21 @@ while that laptop is awake. The daily scheduling examples are covered below.
 
 ## Install
 
-Litletter requires Python 3.11 or newer. Install it with
-[uv](https://docs.astral.sh/uv/) and create the starter files in one command:
+You need [Git](https://git-scm.com/) and [uv](https://docs.astral.sh/uv/).
+Clone Litletter, install it, and create your starter configuration:
 
 ```console
-uv tool install litletter && litletter init
+git clone https://github.com/alexcoulton/litletterpy.git
+cd litletterpy
+uv tool install .
+litletter init
 ```
 
-Alternatively, install it with [pipx](https://pipx.pypa.io/):
+`uv` installs an isolated Python environment and provides the `litletter`
+command; you do not need to create or activate a virtual environment manually.
+Litletter requires Python 3.11 or newer, which `uv` can install when necessary.
 
-```console
-pipx install litletter && litletter init
-```
-
-Until Litletter's first PyPI release, clone this repository and replace
-`litletter` in the install command with `.`. For example:
-
-```console
-uv tool install . && litletter init
-```
-
-Run this command in the folder where you want to keep your newsletter. It
-creates four files:
+The final command creates four files:
 
 - `./litletter.json` — newsletter addresses, categories, and behavior
 - `./author_groups.json` — named author watchlists
