@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import getpass
 import json
 import logging
 import os
+import re
 import sys
 from collections.abc import Iterator, Sequence
 from contextlib import ExitStack, contextmanager
@@ -21,6 +23,7 @@ from litletter.app_config import (
     app_config_template,
     default_app_config_path,
     load_app_config,
+    parse_app_config,
 )
 from litletter.author_groups import author_catalog_template
 from litletter.config import (
@@ -32,6 +35,7 @@ from litletter.config import (
 from litletter.delivery import Mailer, PostmarkMailer, ResendMailer
 from litletter.errors import ConfigurationError, DatabaseError, LitletterError
 from litletter.models import PaperSource
+from litletter.query import parse_query
 from litletter.runner import RunResult, enrich_pending_papers, run_once
 from litletter.sources import ArXivClient, BioRxivClient, MedRxivClient, PubMedClient
 from litletter.storage import Database
@@ -68,6 +72,17 @@ def _build_parser() -> argparse.ArgumentParser:
         "init", help="create a starter newsletter and provider configuration"
     )
     _add_config_argument(initialize_all)
+    init_mode = initialize_all.add_mutually_exclusive_group()
+    init_mode.add_argument(
+        "--interactive",
+        action="store_true",
+        help="run the setup dialogue even when input is not a terminal",
+    )
+    init_mode.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="write starter defaults without prompting",
+    )
     initialize_all.set_defaults(handler=_initialize)
 
     app_command = commands.add_parser("app-config", help="global provider config")
@@ -227,14 +242,13 @@ def _initialize(args: argparse.Namespace) -> int:
             f"starter author groups already exist: {author_groups_path}"
         )
 
+    app_payload: dict[str, object] | None = None
     if app_path.exists():
         app_config = load_app_config(app_path)
         app_message = f"Using existing app config: {app_path}"
     else:
-        _write_json_exclusive(
-            app_path, app_config_template(), mode=0o600, kind="app config"
-        )
-        app_config = load_app_config(app_path)
+        app_payload = app_config_template()
+        app_config = parse_app_config(app_payload, path=app_path)
         app_message = f"Created private app config: {app_path}"
 
     if not app_config.paper_sources:
@@ -250,6 +264,29 @@ def _initialize(args: argparse.Namespace) -> int:
         ),
         app_config.mailers[0],
     )
+    newsletter_payload = newsletter_config_template(
+        pubmed_provider=pubmed_provider,
+        mailer_provider=mailer.id,
+        message_stream=(
+            "broadcasts" if isinstance(mailer, PostmarkProviderConfig) else None
+        ),
+    )
+    interactive = args.interactive or (not args.non_interactive and sys.stdin.isatty())
+    if interactive:
+        try:
+            _run_setup_dialogue(
+                newsletter_payload,
+                app_payload=app_payload,
+                using_existing_app_config=app_payload is None,
+            )
+        except (EOFError, KeyboardInterrupt) as exc:
+            print()
+            raise ConfigurationError("setup cancelled; no files were created") from exc
+
+    if app_payload is not None:
+        parse_app_config(app_payload, path=app_path)
+        _write_json_exclusive(app_path, app_payload, mode=0o600, kind="app config")
+        app_config = load_app_config(app_path)
     _write_json_exclusive(
         author_groups_path,
         author_catalog_template(),
@@ -258,13 +295,7 @@ def _initialize(args: argparse.Namespace) -> int:
     )
     _write_json_exclusive(
         config_path,
-        newsletter_config_template(
-            pubmed_provider=pubmed_provider,
-            mailer_provider=mailer.id,
-            message_stream=(
-                "broadcasts" if isinstance(mailer, PostmarkProviderConfig) else None
-            ),
-        ),
+        newsletter_payload,
         mode=0o644,
         kind="newsletter config",
     )
@@ -281,14 +312,184 @@ def _initialize(args: argparse.Namespace) -> int:
     print(f"Created author groups: {author_groups_path}")
     print(app_message)
     print(f"Initialized database: {config.database}")
-    credential = (
-        "Resend API key"
-        if isinstance(mailer, ResendProviderConfig)
-        else "Postmark server token and message stream"
-    )
-    print(f"\nNext: edit the email addresses and {credential}, then preview with:")
+    if interactive:
+        print("\nSetup complete. Preview your first newsletter with:")
+    else:
+        credential = (
+            "Resend API key"
+            if isinstance(mailer, ResendProviderConfig)
+            else "Postmark server token and message stream"
+        )
+        print(f"\nNext: edit the email addresses and {credential}, then preview with:")
     print("litletter run --bootstrap --dry-run --output litletter-preview.html")
     return 0
+
+
+def _run_setup_dialogue(
+    newsletter_payload: dict[str, object],
+    *,
+    app_payload: dict[str, object] | None,
+    using_existing_app_config: bool,
+) -> None:
+    """Collect the minimum useful single-user setup in a terminal dialogue."""
+    print("\nLitletter setup")
+    print("---------------")
+    print("Press Enter to accept a value shown in brackets.\n")
+
+    newsletter = newsletter_payload["newsletter"]
+    assert isinstance(newsletter, dict)
+    title = _prompt("Newsletter title", default=str(newsletter["title"]))
+    recipient = _prompt("Recipient email")
+    sender = _prompt("Sender", default=str(newsletter["from"]))
+    timezone = _prompt_timezone(default=str(newsletter["timezone"]))
+    newsletter.update(
+        {
+            "title": title,
+            "from": sender,
+            "to": [recipient],
+            "timezone": timezone,
+        }
+    )
+
+    if app_payload is not None:
+        providers = app_payload["providers"]
+        assert isinstance(providers, dict)
+        paper_sources = providers["paper_sources"]
+        mailers = providers["mailers"]
+        assert isinstance(paper_sources, dict)
+        assert isinstance(mailers, dict)
+        pubmed = paper_sources["pubmed-default"]
+        resend = mailers["resend-default"]
+        assert isinstance(pubmed, dict)
+        assert isinstance(resend, dict)
+        pubmed["email"] = _prompt("PubMed contact email", default=recipient)
+        resend["api_key"] = _prompt_secret("Resend API key")
+    elif using_existing_app_config:
+        print("\nUsing your existing private provider configuration.")
+
+    print("\nSet up your newsletter categories.")
+    print("Queries search paper metadata; for example: title_abstract:cancer")
+    print("Available sources: pubmed, biorxiv, medrxiv, arxiv")
+    categories = _prompt_categories()
+    newsletter_payload["categories"] = categories
+
+    selected_sources = {
+        source for category in categories for source in category["sources"]
+    }
+    sources = newsletter_payload["sources"]
+    assert isinstance(sources, dict)
+    pubmed_source = sources["pubmed"]
+    assert isinstance(pubmed_source, dict)
+    pubmed_source["enabled"] = "pubmed" in selected_sources
+    for source_name in ("biorxiv", "medrxiv", "arxiv"):
+        source = sources[source_name]
+        assert isinstance(source, dict)
+        source["enabled"] = source_name in selected_sources
+
+
+def _prompt_categories() -> list[dict[str, object]]:
+    categories: list[dict[str, object]] = []
+    used_ids: set[str] = set()
+    while True:
+        default_name = "Cancer research" if not categories else "Another topic"
+        name = _prompt("Category name", default=default_name)
+        default_query = (
+            "title_abstract:cancer AND publication_type:original_research"
+            if not categories
+            else "title_abstract:'single cell'"
+        )
+        query = _prompt_query(default=default_query)
+        sources = _prompt_sources(default="pubmed")
+        category_id = _unique_category_id(name, used_ids)
+        used_ids.add(category_id)
+        categories.append(
+            {
+                "id": category_id,
+                "name": name,
+                "query": query,
+                "sources": sources,
+            }
+        )
+        if not _prompt_yes_no("Add another category?", default=False):
+            return categories
+
+
+def _prompt(label: str, *, default: str | None = None) -> str:
+    suffix = f" [{default}]" if default is not None else ""
+    while True:
+        value = input(f"{label}{suffix}: ").strip()
+        if value:
+            return value
+        if default is not None:
+            return default
+        print("Please enter a value.")
+
+
+def _prompt_secret(label: str) -> str:
+    while True:
+        value = getpass.getpass(f"{label}: ").strip()
+        if value:
+            return value
+        print("Please enter a value.")
+
+
+def _prompt_timezone(*, default: str) -> str:
+    while True:
+        value = _prompt("Timezone", default=default)
+        try:
+            ZoneInfo(value)
+        except KeyError:
+            print("Unknown timezone. Use an IANA name such as Europe/London.")
+        else:
+            return value
+
+
+def _prompt_query(*, default: str) -> str:
+    while True:
+        value = _prompt("Category query", default=default)
+        try:
+            parse_query(value)
+        except LitletterError as exc:
+            print(f"Invalid query: {exc}")
+        else:
+            return value
+
+
+def _prompt_sources(*, default: str) -> list[str]:
+    supported = {source.value for source in PaperSource}
+    while True:
+        value = _prompt("Sources (comma-separated)", default=default)
+        sources = [part.strip().lower() for part in value.split(",") if part.strip()]
+        unknown = sorted(set(sources) - supported)
+        if unknown:
+            print(f"Unknown source(s): {', '.join(unknown)}")
+        elif not sources:
+            print("Choose at least one source.")
+        else:
+            return list(dict.fromkeys(sources))
+
+
+def _prompt_yes_no(label: str, *, default: bool) -> bool:
+    hint = "Y/n" if default else "y/N"
+    while True:
+        value = input(f"{label} [{hint}]: ").strip().lower()
+        if not value:
+            return default
+        if value in {"y", "yes"}:
+            return True
+        if value in {"n", "no"}:
+            return False
+        print("Enter yes or no.")
+
+
+def _unique_category_id(name: str, used: set[str]) -> str:
+    base = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-") or "category"
+    candidate = base
+    suffix = 2
+    while candidate in used:
+        candidate = f"{base}-{suffix}"
+        suffix += 1
+    return candidate
 
 
 def _write_json_exclusive(

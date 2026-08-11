@@ -18,7 +18,8 @@ while that laptop is awake. The daily scheduling examples are covered below.
 ## Install
 
 You need [Git](https://git-scm.com/) and [uv](https://docs.astral.sh/uv/).
-Clone Litletter, install it, and create your starter configuration:
+Create a free [Resend](https://resend.com/) account and API key, then clone
+Litletter, install it, and start the setup dialogue:
 
 ```console
 git clone https://github.com/alexcoulton/litletterpy.git
@@ -26,6 +27,11 @@ cd litletterpy
 uv tool install .
 litletter init
 ```
+
+`litletter init` asks for your recipient and sender addresses, PubMed contact
+email, Resend API key, timezone, and first search category. It supplies useful
+defaults and lets you add more categories before creating anything. The API key
+is entered without being displayed and is stored in a private file.
 
 `uv` installs an isolated Python environment and provides the `litletter`
 command; you do not need to create or activate a virtual environment manually.
@@ -45,8 +51,9 @@ under `$XDG_CONFIG_HOME/litletter/` instead of `~/.config/litletter/`.
 
 ## Set up email delivery
 
-Create a free [Resend](https://resend.com/) account and an API key. Open
-`~/.config/litletter/app.json` and add your PubMed contact email and Resend key:
+The setup dialogue stores your PubMed contact email and Resend key in
+`~/.config/litletter/app.json`. To change them later, edit the named provider
+entries directly:
 
 ```json
 "pubmed-default": {
@@ -77,8 +84,10 @@ use an address on that domain for `from`.
 
 ## Choose your categories
 
-Each category in `./litletter.json` becomes a section in the email. Give it a
-unique ID, a heading, a search query, and the sources to search:
+The setup dialogue creates your first categories. Each category in
+`./litletter.json` becomes a section in the email, and you can edit or add them
+at any time. Give each one a unique ID, a heading, a search query, and the
+sources to search:
 
 For a complete ready-to-edit configuration, see
 [`examples/litletter.json`](examples/litletter.json). It mirrors a practical

@@ -127,7 +127,7 @@ def test_init_creates_complete_starter_without_overwriting(
     app_config = tmp_path / "config" / "app.json"
     arguments = ["--config", str(config), "--app-config", str(app_config)]
 
-    assert main(["init", *arguments]) == 0
+    assert main(["init", "--non-interactive", *arguments]) == 0
 
     newsletter = json.loads(config.read_text())
     assert newsletter["delivery"] == {"provider": "resend-default"}
@@ -150,7 +150,7 @@ def test_init_creates_complete_starter_without_overwriting(
     assert "Next: edit the email addresses" in capsys.readouterr().out
 
     original = config.read_text()
-    assert main(["init", *arguments]) == 1
+    assert main(["init", "--non-interactive", *arguments]) == 1
     assert config.read_text() == original
     assert "already exists" in capsys.readouterr().err
 
@@ -163,6 +163,7 @@ def test_init_reuses_valid_existing_app_config(tmp_path: Path, capsys) -> None:
         main(
             [
                 "init",
+                "--non-interactive",
                 "--config",
                 str(config),
                 "--app-config",
@@ -178,6 +179,107 @@ def test_init_reuses_valid_existing_app_config(tmp_path: Path, capsys) -> None:
         "provider": "postmark-default",
         "message_stream": "broadcasts",
     }
+
+
+def test_interactive_init_collects_addresses_credentials_and_categories(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    config = tmp_path / "newsletter" / "litletter.json"
+    app_config = tmp_path / "config" / "app.json"
+    answers = iter(
+        [
+            "Cancer Watch",
+            "reader@example.com",
+            "",
+            "Europe/London",
+            "",
+            "Cancer evolution",
+            "title_abstract:'cancer evolution' AND publication_type:original_research",
+            "pubmed, biorxiv",
+            "n",
+        ]
+    )
+    monkeypatch.setattr("builtins.input", lambda _prompt: next(answers))
+    monkeypatch.setattr(
+        "litletter.cli.getpass.getpass", lambda _prompt: "re_test_secret"
+    )
+
+    assert (
+        main(
+            [
+                "init",
+                "--interactive",
+                "--config",
+                str(config),
+                "--app-config",
+                str(app_config),
+            ]
+        )
+        == 0
+    )
+
+    newsletter = json.loads(config.read_text())
+    assert newsletter["newsletter"] == {
+        "title": "Cancer Watch",
+        "from": "Litletter <onboarding@resend.dev>",
+        "to": ["reader@example.com"],
+        "timezone": "Europe/London",
+        "include_abstracts": False,
+        "abstract_max_characters": 800,
+    }
+    assert newsletter["categories"] == [
+        {
+            "id": "cancer-evolution",
+            "name": "Cancer evolution",
+            "query": (
+                "title_abstract:'cancer evolution' AND "
+                "publication_type:original_research"
+            ),
+            "sources": ["pubmed", "biorxiv"],
+        }
+    ]
+    assert newsletter["sources"]["pubmed"]["enabled"] is True
+    assert newsletter["sources"]["biorxiv"]["enabled"] is True
+    assert newsletter["sources"]["medrxiv"]["enabled"] is False
+    app = json.loads(app_config.read_text())
+    assert app["providers"]["paper_sources"]["pubmed-default"]["email"] == (
+        "reader@example.com"
+    )
+    assert app["providers"]["mailers"]["resend-default"]["api_key"] == (
+        "re_test_secret"
+    )
+    output = capsys.readouterr().out
+    assert "Setup complete" in output
+    assert "re_test_secret" not in output
+
+
+def test_interactive_init_cancellation_does_not_create_files(
+    tmp_path: Path, capsys, monkeypatch
+) -> None:
+    config = tmp_path / "newsletter" / "litletter.json"
+    app_config = tmp_path / "config" / "app.json"
+
+    def cancel(_prompt: str) -> str:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("builtins.input", cancel)
+
+    assert (
+        main(
+            [
+                "init",
+                "--interactive",
+                "--config",
+                str(config),
+                "--app-config",
+                str(app_config),
+            ]
+        )
+        == 1
+    )
+    assert not config.exists()
+    assert not app_config.exists()
+    assert "setup cancelled" in capsys.readouterr().err
 
 
 def test_init_refuses_existing_database_before_creating_files(

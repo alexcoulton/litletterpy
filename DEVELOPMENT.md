@@ -45,6 +45,10 @@ litletter config validate --config litletter.json
 litletter db init --config litletter.json
 ```
 
+In a terminal, `litletter init` runs an interactive setup dialogue. Automation
+and packaging tests can retain the generated starter placeholders with
+`litletter init --non-interactive`.
+
 ## Discovery and durable state
 
 The first date window must be approved explicitly. A preview is the safest
