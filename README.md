@@ -4,6 +4,17 @@ Litletter sends you a daily email containing newly published papers that match
 your interests. It searches PubMed and bioRxiv, groups papers into your chosen
 categories, and remembers what it has already sent.
 
+## Suggested setup
+
+For reliable automatic delivery, run Litletter on an always-on machine such as
+a cheap VPS, a home server, or an institutional compute cluster. A scheduler
+runs `litletter run` once each day; Litletter does not need to remain running
+between deliveries. It needs only outbound internet access and persistent
+storage for its two JSON files and SQLite database.
+
+You can test Litletter on a laptop, but scheduled delivery will happen only
+while that laptop is awake. The daily scheduling examples are covered below.
+
 ## Install
 
 Litletter requires Python 3.11 or newer. Install it with
