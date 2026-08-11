@@ -87,12 +87,16 @@ def test_search_paginates_and_normalizes_records(fixture_dir: Path) -> None:
     assert first.journal_abbreviation == "J Useful Results"
     assert first.journal_nlm_id == "101234567"
     assert first.journal_issns == ("2049-3630", "2049-3622")
+    assert first.publication_types == ("Journal Article",)
+    assert first.is_original_research is True
     assert first.url == "https://pubmed.ncbi.nlm.nih.gov/111/"
 
     second = papers[1]
     assert second.published_at == date(2026, 7, 1)
     assert second.abstract is None
     assert second.authors[0].name == "GH Hopper Jr"
+    assert second.publication_types == ("News",)
+    assert second.is_original_research is False
 
 
 def test_search_honors_zero_max_results_without_request() -> None:

@@ -37,6 +37,9 @@
             <CollectiveName>The Atlas Consortium</CollectiveName>
           </Author>
         </AuthorList>
+        <PublicationTypeList>
+          <PublicationType UI="D016428">Journal Article</PublicationType>
+        </PublicationTypeList>
         <ArticleDate DateType="Electronic">
           <Year>2026</Year>
           <Month>08</Month>
@@ -77,6 +80,9 @@
             <Suffix>Jr</Suffix>
           </Author>
         </AuthorList>
+        <PublicationTypeList>
+          <PublicationType UI="D016433">News</PublicationType>
+        </PublicationTypeList>
       </Article>
     </MedlineCitation>
     <PubmedData>

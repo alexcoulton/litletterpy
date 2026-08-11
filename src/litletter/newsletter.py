@@ -6,6 +6,7 @@ import hashlib
 from dataclasses import dataclass
 from datetime import date
 from html import escape
+from urllib.parse import quote
 
 from litletter.config import CategoryConfig, NewsletterConfig
 from litletter.models import Paper
@@ -95,11 +96,11 @@ def _render_text(
         for item in items:
             paper = item.paper
             lines.append(paper.title)
-            lines.append(paper.url)
-            lines.append(_metadata(paper))
+            lines.append(_article_url(paper))
             authors = _authors(paper)
             if authors:
                 lines.append(authors)
+            lines.append(_metadata(paper))
             secondary = [
                 category_names[category_id]
                 for category_id in item.category_ids
@@ -117,7 +118,7 @@ def _render_text(
                         "AI-generated summary based on the abstract.",
                     )
                 )
-            else:
+            elif config.include_abstracts:
                 abstract = _excerpt(paper.abstract, config.abstract_max_characters)
                 if abstract:
                     lines.extend(("", abstract))
@@ -138,17 +139,24 @@ def _render_html(
         items = grouped[category.id]
         if not items:
             continue
-        cards = "".join(
-            _paper_html(item, category_names, config.abstract_max_characters)
-            for item in items
-        )
+        rows = "".join(_paper_html(item, category_names, config) for item in items)
         sections.append(
-            '<section style="margin:32px 0">'
-            f'<h2 style="font-size:22px;margin:0 0 16px">'
+            '<section style="margin:26px 0">'
+            f'<h2 style="font-size:19px;margin:0 0 10px">'
             f"{escape(category.name)} "
             f'<span style="color:#6b7280;font-weight:normal">({len(items)})</span>'
             "</h2>"
-            f"{cards}</section>"
+            '<table role="presentation" width="100%" cellspacing="0" '
+            'cellpadding="0" style="width:100%;border-collapse:collapse;'
+            'background:#ffffff;border:1px solid #e7e5e4">'
+            '<thead><tr style="background:#f5f5f4">'
+            '<th align="left" style="width:82px;padding:8px 10px;'
+            'font-size:11px;color:#78716c;text-transform:uppercase">Date</th>'
+            '<th align="left" style="padding:8px 10px;font-size:11px;'
+            'color:#78716c;text-transform:uppercase">Paper</th>'
+            '<th align="left" style="width:110px;padding:8px 10px;'
+            'font-size:11px;color:#78716c;text-transform:uppercase">Journal</th>'
+            f"</tr></thead><tbody>{rows}</tbody></table></section>"
         )
     noun = "paper" if total == 1 else "papers"
     return (
@@ -168,53 +176,59 @@ def _render_html(
 def _paper_html(
     item: PendingPaper,
     category_names: dict[str, str],
-    abstract_max_characters: int,
+    config: NewsletterConfig,
 ) -> str:
     paper = item.paper
     authors = _authors(paper)
     abstract = (
-        None
-        if item.summary is not None
-        else _excerpt(paper.abstract, abstract_max_characters)
+        _excerpt(paper.abstract, config.abstract_max_characters)
+        if item.summary is None and config.include_abstracts
+        else None
     )
     secondary = [
         category_names[category_id]
         for category_id in item.category_ids
         if category_id != item.primary_category_id
     ]
-    details = [
-        f'<div style="color:#57534e;font-size:14px">{escape(_metadata(paper))}</div>'
-    ]
+    details: list[str] = []
     if authors:
         details.append(
-            f'<div style="color:#57534e;font-size:14px;margin-top:4px">'
+            '<div style="color:#57534e;font-size:12px;line-height:1.35;'
+            'margin-top:3px">'
             f"{escape(authors)}</div>"
         )
     if secondary:
         details.append(
-            '<div style="color:#57534e;font-size:13px;margin-top:6px">'
+            '<div style="color:#78716c;font-size:11px;margin-top:4px">'
             f"Also in: {escape(', '.join(secondary))}</div>"
         )
     if abstract:
         details.append(
-            f'<p style="line-height:1.55;margin:14px 0 0">{escape(abstract)}</p>'
+            f'<p style="font-size:13px;line-height:1.45;margin:8px 0 0">'
+            f"{escape(abstract)}</p>"
         )
     if item.summary is not None:
         details.append(
-            '<p style="line-height:1.5;margin:14px 0 8px">'
+            '<p style="font-size:13px;line-height:1.4;margin:8px 0 4px">'
             f"<strong>Takeaway:</strong> {escape(item.summary.takeaway)}</p>"
-            '<p style="line-height:1.55;margin:0">'
+            '<p style="font-size:13px;line-height:1.45;margin:0">'
             f"{escape(item.summary.summary)}</p>"
             '<div style="color:#78716c;font-size:11px;margin-top:8px">'
             "AI-generated summary based on the abstract.</div>"
         )
+    published = paper.published_at.isoformat() if paper.published_at else "—"
+    journal = paper.journal or paper.category or paper.source.value
     return (
-        '<article style="background:#ffffff;border:1px solid #e7e5e4;'
-        'border-radius:8px;margin:0 0 14px;padding:18px">'
-        '<h3 style="font-size:18px;line-height:1.35;margin:0 0 9px">'
-        f'<a href="{escape(paper.url, quote=True)}" '
-        f'style="color:#1d4ed8;text-decoration:none">{escape(paper.title)}</a>'
-        f"</h3>{''.join(details)}</article>"
+        '<tr style="border-top:1px solid #e7e5e4">'
+        '<td valign="top" style="padding:10px;color:#57534e;font-size:12px;'
+        f'white-space:nowrap">{escape(published)}</td>'
+        '<td valign="top" style="padding:10px">'
+        f'<a href="{escape(_article_url(paper), quote=True)}" '
+        'style="color:#1d4ed8;text-decoration:none;font-size:14px;'
+        f'font-weight:600;line-height:1.35">{escape(paper.title)}</a>'
+        f"{''.join(details)}</td>"
+        '<td valign="top" style="padding:10px;color:#44403c;font-size:12px;'
+        f'line-height:1.35">{escape(journal)}</td></tr>'
     )
 
 
@@ -222,11 +236,18 @@ def _metadata(paper: Paper) -> str:
     parts = [paper.journal or paper.category or paper.source.value]
     if paper.published_at:
         parts.append(paper.published_at.isoformat())
-    if paper.doi:
-        parts.append(f"doi:{paper.doi}")
-    else:
-        parts.append(f"{paper.source.value}:{paper.source_id}")
     return " · ".join(parts)
+
+
+def _article_url(paper: Paper) -> str:
+    if not paper.doi:
+        return paper.url
+    doi = paper.doi.strip()
+    for prefix in ("https://doi.org/", "http://doi.org/", "doi:"):
+        if doi.casefold().startswith(prefix):
+            doi = doi[len(prefix) :]
+            break
+    return f"https://doi.org/{quote(doi, safe='/')}"
 
 
 def _authors(paper: Paper) -> str:

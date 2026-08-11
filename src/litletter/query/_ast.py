@@ -17,6 +17,7 @@ class Field(StrEnum):
     JOURNAL = "journal"
     JOURNAL_GROUP = "journal_group"
     CATEGORY = "category"
+    PUBLICATION_TYPE = "publication_type"
 
 
 class Expression:

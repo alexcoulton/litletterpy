@@ -102,6 +102,11 @@ class FakeBioRxiv:
             '("Nature"[Journal] OR "Science"[Journal] OR "Cell"[Journal])',
         ),
         ("category:bioinformatics", None),
+        ("publication_type:original_research", None),
+        (
+            'publication_type:"Randomized Controlled Trial"',
+            '"Randomized Controlled Trial"[Publication Type]',
+        ),
     ],
 )
 def test_compile_pubmed_candidate_query(query: str, expected: str | None) -> None:

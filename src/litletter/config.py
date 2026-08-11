@@ -30,6 +30,7 @@ class NewsletterConfig:
     to: tuple[str, ...]
     timezone: str
     abstract_max_characters: int
+    include_abstracts: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,7 +195,14 @@ def _parse_newsletter(value: Any) -> NewsletterConfig:
     raw = _object(value, "newsletter")
     _only_keys(
         raw,
-        {"title", "from", "to", "timezone", "abstract_max_characters"},
+        {
+            "title",
+            "from",
+            "to",
+            "timezone",
+            "abstract_max_characters",
+            "include_abstracts",
+        },
         "newsletter",
     )
     recipients = _string_list(raw.get("to"), "newsletter.to")
@@ -216,6 +224,9 @@ def _parse_newsletter(value: Any) -> NewsletterConfig:
         to=recipients,
         timezone=timezone,
         abstract_max_characters=abstract_max,
+        include_abstracts=_boolean(
+            raw.get("include_abstracts", False), "newsletter.include_abstracts"
+        ),
     )
 
 

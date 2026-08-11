@@ -40,6 +40,13 @@ def _evaluate(expression: Expression, text: _PaperText, paper: Paper) -> bool:
             return journal_matches(paper, expression.text)
         if expression.field is Field.JOURNAL_GROUP:
             return get_journal_catalog().contains(expression.text, paper)
+        if expression.field is Field.PUBLICATION_TYPE:
+            if _normalize(expression.text) == "original_research":
+                return paper.is_original_research
+            return any(
+                _normalize(value) == _normalize(expression.text)
+                for value in paper.publication_types
+            )
         return any(
             _contains(value, expression.text, phrase=expression.phrase)
             for value in _field_values(expression.field, text, paper)

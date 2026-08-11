@@ -50,6 +50,7 @@ def test_parse_config_validates_and_resolves_paths(tmp_path: Path) -> None:
 
     assert config.database == tmp_path / "state" / "litletter.sqlite3"
     assert config.newsletter.abstract_max_characters == 800
+    assert config.newsletter.include_abstracts is False
     assert config.pubmed.provider == "pubmed-default"
     assert config.summarization.enabled is False
     assert config.categories[0].id == "nsc-cancer"
@@ -71,6 +72,10 @@ def test_parse_config_validates_and_resolves_paths(tmp_path: Path) -> None:
         (
             lambda value: value["newsletter"].update(timezone="Moon/Base"),
             "timezone is unknown",
+        ),
+        (
+            lambda value: value["newsletter"].update(include_abstracts="no"),
+            "include_abstracts must be a boolean",
         ),
         (
             lambda value: value.update(unexpected=True),

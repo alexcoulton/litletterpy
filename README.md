@@ -55,7 +55,7 @@ query, and one or more sources. For example:
 {
   "id": "nsc-cancer",
   "name": "Nature, Science and Cell: Cancer",
-  "query": "title_abstract:cancer AND journal_group:flagship_nsc",
+  "query": "title_abstract:cancer AND journal_group:flagship_nsc AND publication_type:original_research",
   "sources": ["pubmed"]
 }
 ```
@@ -63,6 +63,12 @@ query, and one or more sources. For example:
 Category order controls the email section order. If a paper matches several
 categories, it appears once under the first matching category and lists the
 others as secondary categories.
+
+Newsletter HTML uses a compact table with date, title, authors, and journal.
+Paper titles resolve through `https://doi.org/` when a DOI is available and
+fall back to the source record otherwise. Abstracts are hidden by default;
+set `newsletter.include_abstracts` to `true` to restore excerpts controlled by
+`abstract_max_characters`. Enabled AI summaries remain visible independently.
 
 Copy and edit the example, then validate it and initialize its SQLite database:
 
@@ -298,14 +304,21 @@ The query language supports:
 - Case-insensitive `AND`, `OR`, and unary `NOT`.
 - Parentheses, with precedence `NOT`, then `AND`, then `OR`.
 - Quoted phrases, including `\"` and `\\` escapes.
-- `title:`, `abstract:`, `title_abstract:`, `journal:`, `journal_group:`, and
-  `category:` field prefixes.
+- `title:`, `abstract:`, `title_abstract:`, `journal:`, `journal_group:`,
+  `category:`, and `publication_type:` field prefixes.
 - Field-scoped groups such as `title:(cancer OR tumour)`.
 
 Unqualified terms search the title and abstract. Unquoted terms match complete
 words, while quoted phrases match a contiguous substring. Matching is Unicode
 case-insensitive and collapses runs of whitespace. Boolean operators must be
 explicit; Litletter does not insert an implicit `AND` between adjacent terms.
+
+Use `publication_type:original_research` to retain research articles and
+bioRxiv preprints while excluding PubMed reviews, systematic reviews,
+meta-analyses, news, editorials, comments, letters, corrections, retractions,
+guidelines, and other non-research formats. PubMed filtering uses its controlled
+publication-type metadata rather than title keywords. Exact PubMed types are
+also searchable, for example `publication_type:"Randomized Controlled Trial"`.
 
 ### Journals and journal groups
 

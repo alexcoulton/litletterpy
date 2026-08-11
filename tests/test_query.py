@@ -21,6 +21,7 @@ def paper(
     journal_abbreviation: str | None = None,
     journal_nlm_id: str | None = None,
     journal_issns: tuple[str, ...] = (),
+    publication_types: tuple[str, ...] = (),
 ) -> Paper:
     return Paper(
         source=source,
@@ -37,6 +38,7 @@ def paper(
         journal_abbreviation=journal_abbreviation,
         journal_nlm_id=journal_nlm_id,
         journal_issns=journal_issns,
+        publication_types=publication_types,
     )
 
 
@@ -154,6 +156,35 @@ def test_category_field_matches_biorxiv_categories() -> None:
     assert not query.matches(
         paper("Cancer model", source=PaperSource.BIORXIV, category="genomics")
     )
+
+
+def test_publication_type_supports_original_research_filter() -> None:
+    query = parse_query("publication_type:original_research")
+
+    assert query.matches(paper("Experiment", publication_types=("Journal Article",)))
+    assert query.matches(
+        paper(
+            "Trial",
+            publication_types=("Journal Article", "Randomized Controlled Trial"),
+        )
+    )
+    assert not query.matches(
+        paper("Review", publication_types=("Journal Article", "Review"))
+    )
+    assert not query.matches(paper("News item", publication_types=("News",)))
+    assert query.matches(paper("Preprint", source=PaperSource.BIORXIV))
+
+
+def test_publication_type_can_match_exact_pubmed_type() -> None:
+    candidate = paper(
+        "Trial",
+        publication_types=("Journal Article", "Randomized Controlled Trial"),
+    )
+
+    assert parse_query('publication_type:"randomized controlled trial"').matches(
+        candidate
+    )
+    assert not parse_query("publication_type:review").matches(candidate)
 
 
 def test_quoted_phrases_are_case_insensitive_and_whitespace_normalized() -> None:

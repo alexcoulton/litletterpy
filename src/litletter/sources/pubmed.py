@@ -381,6 +381,11 @@ def _parse_pubmed_record(record: ET.Element) -> Paper:
         value = _text(element)
         if value and value not in journal_issns:
             journal_issns.append(value)
+    publication_types = tuple(
+        value
+        for element in article.findall("./PublicationTypeList/PublicationType")
+        if (value := _text(element))
+    )
     return Paper(
         source=PaperSource.PUBMED,
         source_id=pmid,
@@ -395,6 +400,7 @@ def _parse_pubmed_record(record: ET.Element) -> Paper:
         journal_abbreviation=journal_abbreviation,
         journal_nlm_id=journal_nlm_id,
         journal_issns=tuple(journal_issns),
+        publication_types=publication_types,
     )
 
 

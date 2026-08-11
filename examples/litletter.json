@@ -6,6 +6,7 @@
     "from": "Litletter <newsletter@updates.example.com>",
     "to": ["you@example.com"],
     "timezone": "Europe/London",
+    "include_abstracts": false,
     "abstract_max_characters": 800
   },
   "sources": {
@@ -25,13 +26,13 @@
     {
       "id": "nsc-cancer",
       "name": "Nature, Science and Cell: Cancer",
-      "query": "title_abstract:cancer AND journal_group:flagship_nsc",
+      "query": "title_abstract:cancer AND journal_group:flagship_nsc AND publication_type:original_research",
       "sources": ["pubmed"]
     },
     {
       "id": "cancer-preprints",
       "name": "Cancer Preprints",
-      "query": "title_abstract:cancer",
+      "query": "title_abstract:cancer AND publication_type:original_research",
       "sources": ["biorxiv"]
     }
   ],

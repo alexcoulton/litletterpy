@@ -57,6 +57,11 @@ def _compile_term(term: Term) -> str | None:
         group = get_journal_catalog().get(term.text)
         components = [_compile_journal(journal) for journal in group.journals]
         return f"({' OR '.join(components)})"
+    if term.field is Field.PUBLICATION_TYPE:
+        if term.text.casefold() == "original_research":
+            return None
+        escaped = term.text.replace('"', "")
+        return f'"{escaped}"[Publication Type]'
     if term.field is Field.CATEGORY:
         return None
     tokens = _SEARCH_TOKEN.findall(term.text)

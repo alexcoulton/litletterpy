@@ -9,7 +9,13 @@ from litletter.storage import PendingPaper
 from litletter.summarization import PaperSummary
 
 
-def paper(source_id: str, title: str, *, abstract: str | None) -> Paper:
+def paper(
+    source_id: str,
+    title: str,
+    *,
+    abstract: str | None,
+    doi: str | None = "10.1000/example",
+) -> Paper:
     return Paper(
         source=PaperSource.PUBMED,
         source_id=source_id,
@@ -18,7 +24,7 @@ def paper(source_id: str, title: str, *, abstract: str | None) -> Paper:
         authors=tuple(Author(f"Author {index}") for index in range(10)),
         published_at=date(2026, 8, 9),
         updated_at=None,
-        doi="10.1000/example",
+        doi=doi,
         url=f"https://example.test/?paper={source_id}&view=full",
         journal="Nature",
     )
@@ -45,6 +51,7 @@ def test_renderer_groups_papers_and_escapes_html() -> None:
         to=("reader@example.com",),
         timezone="Europe/London",
         abstract_max_characters=24,
+        include_abstracts=True,
     )
     items = [
         PendingPaper(
@@ -73,8 +80,42 @@ def test_renderer_groups_papers_and_escapes_html() -> None:
     assert "A long abstract…" in rendered.text
     assert "<script>" not in rendered.html
     assert "Cancer &lt;script&gt;" in rendered.html
-    assert "paper=1&amp;view=full" in rendered.html
+    assert 'href="https://doi.org/10.1000/example"' in rendered.html
     assert "Cancer &amp; Oncology" in rendered.html
+    assert '<table role="presentation"' in rendered.html
+    assert ">Date</th>" in rendered.html
+    assert ">Paper</th>" in rendered.html
+    assert ">Journal</th>" in rendered.html
+
+
+def test_renderer_hides_abstracts_by_default_and_falls_back_without_doi() -> None:
+    category = CategoryConfig(
+        id="cancer",
+        name="Cancer",
+        query="cancer",
+        sources=(PaperSource.PUBMED,),
+    )
+    config = NewsletterConfig(
+        title="Litletter",
+        from_address="sender@example.com",
+        to=("reader@example.com",),
+        timezone="UTC",
+        abstract_max_characters=800,
+    )
+    item = PendingPaper(
+        paper("1", "Result", abstract="Dense original abstract.", doi=None),
+        "cancer",
+        ("cancer",),
+    )
+
+    rendered = render_newsletter(
+        config, (category,), [item], edition_date=date(2026, 8, 9)
+    )
+
+    assert "Dense original abstract." not in rendered.text
+    assert "Dense original abstract." not in rendered.html
+    assert "https://example.test/?paper=1&view=full" in rendered.text
+    assert "paper=1&amp;view=full" in rendered.html
 
 
 def test_edition_id_is_stable_for_same_content() -> None:

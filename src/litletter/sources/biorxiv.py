@@ -142,6 +142,7 @@ def _parse_biorxiv_record(record: dict[str, Any]) -> Paper:
         url=f"https://www.biorxiv.org/content/{doi}{version_suffix}",
         category=category,
         version=version,
+        publication_types=("Preprint",),
     )
 
 
