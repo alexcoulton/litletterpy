@@ -102,6 +102,12 @@ class FakeBioRxiv:
             '("Nature"[Journal] OR "Science"[Journal] OR "Cell"[Journal])',
         ),
         ("category:bioinformatics", None),
+        ("author:Coulton", None),
+        ("author:'Alex Coulton'", '"coulton"[Author]'),
+        (
+            "journal:Nature OR author:'Alex Coulton'",
+            '("Nature"[Journal] OR "coulton"[Author])',
+        ),
         ("publication_type:original_research", None),
         (
             'publication_type:"Randomized Controlled Trial"',

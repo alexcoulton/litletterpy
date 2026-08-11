@@ -276,8 +276,8 @@ The language supports:
 - Parentheses, with precedence `NOT`, then `AND`, then `OR`.
 - Phrases in single or double quotes. Double-quoted phrases accept `\"` and
   `\\` escapes; single-quoted phrases accept `\'` and `\\` escapes.
-- `title:`, `abstract:`, `title_abstract:`, `journal:`, `journal_group:`,
-  `category:`, and `publication_type:` field prefixes.
+- `title:`, `abstract:`, `title_abstract:`, `author:`, `journal:`,
+  `journal_group:`, `category:`, and `publication_type:` field prefixes.
 - Field-scoped groups such as `title:(cancer OR tumour)`.
 
 Unqualified terms search title and abstract. Unquoted terms match complete
@@ -285,6 +285,16 @@ words, while quoted phrases match a contiguous substring. Apostrophes within
 unquoted terms, such as `Alzheimer's`, remain part of the term. Matching is
 Unicode case-insensitive and collapses whitespace. Boolean operators must be
 explicit; Litletter does not insert an implicit `AND` between adjacent terms.
+
+`author:` searches normalized author names and available ORCIDs. Quoted full
+names additionally tolerate omitted middle initials and comma-inverted source
+formats, so `author:'Alex Coulton'` can match `Alex B. Coulton` or
+`Coulton, A.`. For candidate selection, Litletter sends only the likely family
+name to PubMed or arXiv and confirms the complete author locally. Ambiguous
+single-word author terms are evaluated locally from date-bounded candidates.
+When a source supplies only a given-name initial, people sharing the same
+family name and initial cannot be distinguished; use an ORCID in the
+`author:` query when that source provides one.
 
 `publication_type:original_research` retains research articles and bioRxiv
 preprints while excluding PubMed reviews, systematic reviews, meta-analyses,
@@ -367,8 +377,9 @@ source-irrelevant branches are not used for candidate selection because that
 could exclude valid results. If no safe positive selector exists, records are
 fetched using only the source's requested date range. Candidate limits are
 applied before local filtering and can therefore reduce match counts. PubMed
-journal constraints compile to its `[Journal]` field; large groups are sent
-with POST automatically. Rxiv records are fetched once per recurring run and
+journal and author constraints compile to its `[Journal]` and `[Author]`
+fields; large groups are sent with POST automatically. arXiv author constraints
+compile to `au:` selectors. Rxiv records are fetched once per recurring run and
 shared across categories before local filtering.
 
 ## Interactive scratchpad

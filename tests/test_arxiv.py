@@ -75,6 +75,12 @@ _THIRD_ENTRY = """\
         ),
         ("category:q-bio.CB", "cat:q-bio.CB"),
         ("category:'computer science'", None),
+        ("author:Coulton", None),
+        ("author:'Alex Coulton'", "au:coulton"),
+        (
+            "title:cancer OR author:'Alex Coulton'",
+            "(ti:cancer OR au:coulton)",
+        ),
         ("title:cancer AND NOT abstract:review", "ti:cancer"),
         ("title:cancer OR journal:Nature", None),
         ("publication_type:original_research", None),

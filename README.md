@@ -132,6 +132,7 @@ quotes. The most useful search fields are:
 - `publication_type:original_research` to exclude reviews, news, editorials,
   corrections, and other non-research material
 - `category:` for a bioRxiv, medRxiv, or arXiv subject category
+- `author:` for an author name or ORCID
 
 For example:
 
@@ -152,6 +153,32 @@ escaping:
 
 Categories appear in the order listed. A paper matching several categories is
 shown only once, under its first match.
+
+## Add an author watchlist
+
+An author watchlist is an ordinary category whose query uses `author:`. List
+full names in quotes and separate them with `OR`:
+
+```json
+{
+  "id": "author-watchlist",
+  "name": "Author Watchlist",
+  "query": "author:('Ada Lovelace' OR 'Grace Hopper')",
+  "sources": ["pubmed", "biorxiv", "medrxiv", "arxiv"]
+}
+```
+
+Every new paper by either author is included in that section, regardless of
+journal or topic. Names are case-insensitive, and matching tolerates middle
+initials and source formats such as `Lovelace, A.`.
+
+To retain a topic requirement while allowing watched authors to bypass only the
+journal restriction, put the journal and author clauses in the same group:
+
+```text
+title_abstract:cancer AND
+(journal_group:flagship_nsc OR author:('Ada Lovelace' OR 'Grace Hopper'))
+```
 
 ## Preview and send
 

@@ -46,6 +46,12 @@
       "name": "Machine Learning Preprints",
       "query": "title_abstract:'machine learning' AND category:(cs.LG OR stat.ML)",
       "sources": ["arxiv"]
+    },
+    {
+      "id": "author-watchlist",
+      "name": "Author Watchlist",
+      "query": "author:('Ada Lovelace' OR 'Grace Hopper')",
+      "sources": ["pubmed", "biorxiv", "medrxiv", "arxiv"]
     }
   ],
   "summarization": {

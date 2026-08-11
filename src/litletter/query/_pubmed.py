@@ -6,6 +6,7 @@ import re
 
 from litletter.journals import get_journal_catalog
 from litletter.query._ast import And, Expression, Field, Not, Or, Query, Term
+from litletter.query._authors import candidate_family_name
 from litletter.query._parser import parse_query
 
 _SEARCH_TOKEN = re.compile(r"[^\W_]+", re.UNICODE)
@@ -62,6 +63,13 @@ def _compile_term(term: Term) -> str | None:
             return None
         escaped = term.text.replace('"', "")
         return f'"{escaped}"[Publication Type]'
+    if term.field is Field.AUTHOR:
+        if not term.phrase:
+            return None
+        family_name = candidate_family_name(term.text)
+        if family_name is None:
+            return None
+        return f'"{family_name}"[Author]'
     if term.field is Field.CATEGORY:
         return None
     tokens = _SEARCH_TOKEN.findall(term.text)

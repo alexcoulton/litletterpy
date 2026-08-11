@@ -6,7 +6,7 @@ from datetime import date
 import pytest
 
 from litletter import QuerySyntaxError
-from litletter.models import Paper, PaperSource
+from litletter.models import Author, Paper, PaperSource
 from litletter.query import And, Field, Not, Or, Term, filter_papers, parse_query
 
 
@@ -22,13 +22,14 @@ def paper(
     journal_nlm_id: str | None = None,
     journal_issns: tuple[str, ...] = (),
     publication_types: tuple[str, ...] = (),
+    authors: tuple[Author, ...] = (),
 ) -> Paper:
     return Paper(
         source=source,
         source_id=source_id,
         title=title,
         abstract=abstract,
-        authors=(),
+        authors=authors,
         published_at=date(2026, 8, 9),
         updated_at=None,
         doi=None,
@@ -155,6 +156,49 @@ def test_category_field_matches_biorxiv_categories() -> None:
     )
     assert not query.matches(
         paper("Cancer model", source=PaperSource.BIORXIV, category="genomics")
+    )
+
+
+def test_author_field_matches_names_across_source_formats() -> None:
+    query = parse_query("author:'Alex Coulton'")
+
+    assert query.matches(paper("Paper", authors=(Author("Alex Coulton"),)))
+    assert query.matches(paper("Paper", authors=(Author("Alex B. Coulton"),)))
+    assert query.matches(paper("Paper", authors=(Author("Coulton, A."),)))
+    assert not query.matches(paper("Paper", authors=(Author("Alice Coulton"),)))
+    assert not query.matches(paper("Paper", authors=(Author("Alex Colton"),)))
+
+
+def test_author_field_matches_unquoted_name_parts_and_orcid() -> None:
+    candidate = paper(
+        "Paper",
+        authors=(Author("Alex Coulton", "0000-0001-2345-6789"),),
+    )
+
+    assert parse_query("author:Coulton").matches(candidate)
+    assert parse_query("author:0000-0001-2345-6789").matches(candidate)
+    assert not parse_query("author:Smith").matches(candidate)
+
+
+def test_author_watchlist_can_bypass_only_the_journal_filter() -> None:
+    query = parse_query(
+        "title_abstract:cancer AND "
+        "(journal_group:flagship_nsc OR author:'Alex Coulton')"
+    )
+
+    assert query.matches(
+        paper(
+            "Cancer mechanisms",
+            journal="Specialist Journal",
+            authors=(Author("Alex Coulton"),),
+        )
+    )
+    assert not query.matches(
+        paper(
+            "Plant mechanisms",
+            journal="Specialist Journal",
+            authors=(Author("Alex Coulton"),),
+        )
     )
 
 

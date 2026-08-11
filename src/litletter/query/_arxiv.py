@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 
 from litletter.query._ast import And, Expression, Field, Not, Or, Query, Term
+from litletter.query._authors import candidate_family_name
 from litletter.query._parser import parse_query
 
 _SEARCH_TOKEN = re.compile(r"[^\W_]+", re.UNICODE)
@@ -45,6 +46,13 @@ def _compile(expression: Expression) -> str | None:
 
 
 def _compile_term(term: Term) -> str | None:
+    if term.field is Field.AUTHOR:
+        if not term.phrase:
+            return None
+        family_name = candidate_family_name(term.text)
+        if family_name is None:
+            return None
+        return f"au:{family_name.replace(' ', '_')}"
     if term.field is Field.CATEGORY:
         return f"cat:{term.text}" if _CATEGORY.fullmatch(term.text) else None
     if term.field in {

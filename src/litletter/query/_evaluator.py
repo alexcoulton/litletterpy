@@ -10,6 +10,7 @@ from functools import lru_cache
 from litletter.journals import get_journal_catalog, journal_matches
 from litletter.models import Paper
 from litletter.query._ast import And, Expression, Field, Not, Or, Query, Term
+from litletter.query._authors import matches_author
 from litletter.query._parser import parse_query
 
 
@@ -46,6 +47,15 @@ def _evaluate(expression: Expression, text: _PaperText, paper: Paper) -> bool:
             return any(
                 _normalize(value) == _normalize(expression.text)
                 for value in paper.publication_types
+            )
+        if expression.field is Field.AUTHOR:
+            return any(
+                matches_author(
+                    author,
+                    expression.text,
+                    phrase=expression.phrase,
+                )
+                for author in paper.authors
             )
         return any(
             _contains(value, expression.text, phrase=expression.phrase)
