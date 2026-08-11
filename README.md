@@ -1,34 +1,45 @@
 # Litletter
 
-Litletter emails you the new research papers you care about. It searches PubMed
-and bioRxiv with Boolean queries, organizes results into categories, links to
-the articles by DOI, and remembers what it has already sent.
+Litletter sends you a daily email containing newly published papers that match
+your interests. It searches PubMed and bioRxiv, groups papers into your chosen
+categories, and remembers what it has already sent.
 
-## Quick start
+## Install
 
-Install Litletter and create a starter newsletter in one command:
+Litletter requires Python 3.11 or newer. Install it with
+[pipx](https://pipx.pypa.io/) and create the starter files in one command:
+
+```console
+pipx install litletter && litletter init
+```
+
+If you already use [uv](https://docs.astral.sh/uv/), the equivalent is:
 
 ```console
 uv tool install litletter && litletter init
 ```
 
-Until the first PyPI release, run this from a cloned repository instead:
+Until Litletter's first PyPI release, clone this repository and replace
+`litletter` in the install command with `.`. For example:
 
 ```console
-uv tool install . && litletter init
+pipx install . && litletter init
 ```
 
-The command creates:
+This creates `litletter.json`, a private provider configuration, and a small
+SQLite database. SQLite keeps track of delivered papers so they are not sent
+twice; there is no database server to install.
 
-- `litletter.json` — searches, recipients, and newsletter presentation.
-- `~/.config/litletter/app.json` — API credentials, stored with private file
-  permissions.
-- `state/litletter.sqlite3` — local delivery history and duplicate prevention.
+## Set up email delivery
 
-### 1. Add your email and Resend key
+Create a free [Resend](https://resend.com/) account and an API key. Find your
+private provider configuration with:
 
-Open the app config shown by `litletter app-config path`. Set your PubMed contact
-email, then replace the Resend environment reference with your API key:
+```console
+litletter app-config path
+```
+
+Open that file and add your PubMed contact email and Resend key:
 
 ```json
 "pubmed-default": {
@@ -41,436 +52,145 @@ email, then replace the Resend environment reference with your API key:
 }
 ```
 
-In `litletter.json`, replace `you@example.com` under `newsletter.to`. Resend's
-`onboarding@resend.dev` sender is suitable for sending a test to the email on
-your Resend account. For regular delivery, verify a domain in Resend and change
-`newsletter.from` to an address on that domain.
+Then open `litletter.json` and change the newsletter addresses:
 
-### 2. Preview your first newsletter
+```json
+"newsletter": {
+  "title": "My Litletter",
+  "from": "Litletter <onboarding@resend.dev>",
+  "to": ["you@example.com"],
+  "timezone": "Europe/London",
+  "include_abstracts": false
+}
+```
 
-The starter search finds original cancer research in Nature, Science, and Cell:
+The Resend onboarding address can send test messages only to the email address
+on your Resend account. To send to other people, verify a domain with Resend and
+use an address on that domain for `from`.
+
+## Choose your categories
+
+Each category in `litletter.json` becomes a section in the email. Give it a
+unique ID, a heading, a search query, and the sources to search:
+
+```json
+"categories": [
+  {
+    "id": "nsc-cancer",
+    "name": "Nature, Science and Cell: Cancer",
+    "query": "title_abstract:cancer AND journal_group:flagship_nsc AND publication_type:original_research",
+    "sources": ["pubmed"]
+  },
+  {
+    "id": "cancer-preprints",
+    "name": "Cancer Preprints",
+    "query": "title_abstract:cancer AND publication_type:original_research",
+    "sources": ["biorxiv"]
+  }
+]
+```
+
+Queries support `AND`, `OR`, `NOT`, parentheses, and quoted phrases. The most
+useful search fields are:
+
+- `title:`, `abstract:`, or `title_abstract:`
+- `journal:` for one journal
+- `journal_group:` for built-in collections such as `flagship_nsc`,
+  `nature_portfolio`, `science_family`, `cell_press`, and
+  `nature_index_current`
+- `publication_type:original_research` to exclude reviews, news, editorials,
+  corrections, and other non-research material
+- `category:` for a bioRxiv subject category
+
+For example:
+
+```text
+title_abstract:(cancer OR tumour) AND NOT title:review
+title:"spatial transcriptomics" AND journal_group:nature_portfolio
+```
+
+Categories appear in the order listed. A paper matching several categories is
+shown only once, under its first match. If you add a bioRxiv category, also set
+`sources.biorxiv.enabled` to `true` in the same file.
+
+## Preview and send
+
+The first run searches the number of days set by `initial_lookback_days`. Review
+that initial batch without sending it:
 
 ```console
 litletter run --bootstrap --dry-run --no-summarization \
   --output litletter-preview.html
 ```
 
-Open `litletter-preview.html`, then send the same papers:
+Open `litletter-preview.html`. If it looks right, send the newsletter:
 
 ```console
 litletter run --no-summarization
 ```
 
-That is a complete local setup. Edit the categories in `litletter.json` to
-follow different topics or journals, and schedule the same finite
-`litletter run` command when you are happy with the results.
+After this first run, every ordinary `litletter run` searches only for new
+papers, with a small overlap to allow for indexing delays. Successfully sent
+papers are automatically excluded from later emails.
 
-## Configuration
-
-Litletter deliberately separates machine-level provider credentials from
-newsletter behavior. The global app config defaults to
-`~/.config/litletter/app.json` and defines reusable PubMed, summarizer, and
-mailer profiles. A newsletter config references those profiles and contains
-addressing, discovery behavior, ordered searches, and presentation settings.
-`LITLETTER_APP_CONFIG` can override the global location.
-
-You can inspect or validate the generated app config at any time:
+Check the current state at any time with:
 
 ```console
-litletter app-config path
-litletter app-config validate
+litletter status
 ```
 
-Secrets can be stored directly as `api_key`/`server_token`, or indirectly as
-`api_key_env`/`server_token_env`. The generated file uses environment references
-and mode `0600`, keeping secrets outside the repository. See
-[examples/app.json](examples/app.json) for the complete structure.
+## Send it every day
 
-Start the newsletter from [examples/litletter.json](examples/litletter.json).
-Paths such as `database` are resolved relative to the newsletter JSON file, not
-the shell's current directory.
-
-Each category has a stable lowercase ID, a display name, a Litletter Boolean
-query, and one or more sources. For example:
-
-```json
-{
-  "id": "nsc-cancer",
-  "name": "Nature, Science and Cell: Cancer",
-  "query": "title_abstract:cancer AND journal_group:flagship_nsc AND publication_type:original_research",
-  "sources": ["pubmed"]
-}
-```
-
-Category order controls the email section order. If a paper matches several
-categories, it appears once under the first matching category and lists the
-others as secondary categories.
-
-Newsletter HTML uses a compact table with date, title, authors, and journal.
-Paper titles resolve through `https://doi.org/` when a DOI is available and
-fall back to the source record otherwise. Abstracts are hidden by default;
-set `newsletter.include_abstracts` to `true` to restore excerpts controlled by
-`abstract_max_characters`. Enabled AI summaries remain visible independently.
-
-Validate the newsletter or initialize a database manually when not using
-`litletter init`:
-
-```console
-litletter config validate --config litletter.json
-litletter db init --config litletter.json
-```
-
-The first date window must be approved explicitly. Previewing it is the safest
-bootstrap workflow:
-
-```console
-litletter run --config litletter.json \
-  --bootstrap --dry-run --output /tmp/litletter-preview.html
-```
-
-That command fetches and stores matches and advances the discovery watermark,
-but does not create a delivery edition or mark any paper sent. Subsequent runs
-use an overlapping date window so delayed indexing does not create gaps. Global
-deduplication happens against successfully submitted editions, so overlap and
-papers matching multiple categories do not cause repeated email entries.
-
-### Optional DeepSeek summaries
-
-When `summarization.enabled` is true, Litletter summarizes each unsent paper that
-has an abstract before rendering. The built-in DeepSeek adapter requests
-validated JSON containing a short takeaway and a plain-language summary. The
-newsletter labels generated text clearly and falls back to the original
-abstract when `failure_policy` is `fallback`.
-
-Enabling the feature sends each paper's title and public abstract to the
-selected DeepSeek profile. Use `failure_policy: "abort"` when every paper must
-be summarized before an edition can be created.
-
-Successful summaries are cached in SQLite using the paper text, provider,
-model, and prompt identity. Delivery retries never call the model again.
-Changing the model or prompt creates a new cache identity without destroying
-older summaries.
-
-The runner depends on a provider-neutral `Summarizer` interface; DeepSeek is an
-adapter rather than a dependency of discovery or rendering, so another provider
-can be added without changing the pipeline.
-
-Precompute pending summaries without discovering or sending anything:
-
-```console
-litletter summarize --config litletter.json --pending
-```
-
-Disable summarization persistently with `"enabled": false`, or bypass it for one
-run while retaining the cache:
-
-```console
-litletter run --config litletter.json --no-summarization
-```
-
-Dry runs can create cached summaries and therefore make billable DeepSeek API
-calls, but still never create or deliver an email edition. Papers without an
-abstract remain unsummarized rather than being guessed from the title.
-
-### Resend delivery
-
-Create a Resend API key and verify a domain that you own. Set
-`newsletter.from` to any address at that verified domain, select a Resend mailer
-profile, and omit the Postmark-only `delivery.message_stream` setting:
-
-```json
-"delivery": {
-  "provider": "resend-default"
-}
-```
-
-Provide the API key through the environment variable referenced by the profile
-or store it directly as `api_key` in the private app config:
-
-```console
-export LITLETTER_RESEND_API_KEY="re_your-api-key"
-litletter run --config litletter.json
-```
-
-Litletter sends through Resend's Email API and attaches an idempotency key based
-on the immutable edition ID. Resend requires a verified domain for sending to
-real recipients; public email domains such as Gmail cannot be verified as your
-sending domain.
-
-### Postmark delivery
-
-Create a Postmark server, verify the individual address used by
-`newsletter.from`, and create a Broadcast Message Stream whose ID matches
-`delivery.message_stream`. Put its server token in the selected mailer profile
-or the environment variable referenced by that profile:
-
-```console
-export LITLETTER_POSTMARK_TOKEN="your-server-token"
-litletter run --config litletter.json
-```
-
-A verified individual sender signature is sufficient for this single-user
-setup; the sender and recipient can be the same address. A Broadcast stream is
-appropriate for newsletters and lets Postmark apply its broadcast/unsubscribe
-handling.
-
-To select Postmark instead, use both its provider profile and stream ID:
-
-```json
-"delivery": {
-  "provider": "postmark-default",
-  "message_stream": "broadcasts"
-}
-```
-
-### Delivery state and recovery
-
-Use `litletter status --config litletter.json` to inspect the watermark, pending
-papers, submitted editions, and any edition requiring attention. Provider
-requests are deliberately not retried automatically. A definite rejection
-leaves a failed edition that can be resent after correction:
-
-```console
-litletter run --config litletter.json --retry-open-edition
-```
-
-If a timeout makes the outcome uncertain, the edition remains in `sending` and
-all future sends stop. Check the selected provider using the edition metadata
-shown by `litletter status`, then resolve it explicitly:
-
-```console
-# The message exists at the provider:
-litletter edition resolve --config litletter.json EDITION_ID \
-  --delivered --message-id PROVIDER_MESSAGE_ID
-
-# The provider confirms that it was not accepted:
-litletter edition resolve --config litletter.json EDITION_ID \
-  --not-delivered
-litletter run --config litletter.json --retry-open-edition
-```
-
-### Scheduling on a server
-
-One CLI invocation performs one finite run, which makes it suitable for cron or
-a systemd timer. It takes a non-blocking file lock next to the database, so an
-overlapping invocation exits instead of running concurrently.
-
-For cron, activate nothing; call the installed executable by its absolute path:
+Litletter performs one finite update each time `litletter run` is called, so it
+can be scheduled with cron. Find the executable with `which litletter`, then add
+a daily entry with `crontab -e`. For example:
 
 ```cron
-15 7 * * * cd /opt/litletter && /opt/litletter/.venv/bin/litletter run --config /etc/litletter/litletter.json --app-config /etc/litletter/app.json
+15 7 * * * cd /path/to/your/litletter-folder && /absolute/path/to/litletter run
 ```
 
-The sample [systemd service](deploy/litletter.service) and
-[timer](deploy/litletter.timer) are more resilient: the timer is persistent, so
-a run missed while the server was offline starts after it returns. Adapt the
-paths, copy the two JSON files to `/etc/litletter/`, use
-`/var/lib/litletter/litletter.sqlite3` as its database, and store secrets in a
-root-owned environment file based on
-[deploy/litletter.env.example](deploy/litletter.env.example). Then install and
-enable the units:
+Use absolute paths and keep `litletter.json` and its `state` directory in the
+working folder. Litletter prevents two scheduled runs from operating on the
+same database simultaneously.
 
-```console
-sudo cp deploy/litletter.service deploy/litletter.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now litletter.timer
-systemctl list-timers litletter.timer
+For a server using systemd, ready-to-adapt service and timer files are provided
+in [`deploy/`](deploy/). See [DEVELOPMENT.md](DEVELOPMENT.md#server-deployment)
+for the setup commands.
+
+## Optional AI summaries
+
+Litletter works without AI summaries. To enable them, put a DeepSeek API key in
+the `deepseek-default` entry of your private provider configuration:
+
+```json
+"deepseek-default": {
+  "type": "deepseek",
+  "api_key": "your_deepseek_api_key",
+  "base_url": "https://api.deepseek.com",
+  "timeout_seconds": 60
+}
 ```
 
-SQLite is the only persistent service. It records papers, category memberships,
-cached summaries and token usage, run watermarks, immutable rendered editions,
-and delivery attempts. There is no database daemon to administer; back up the
-database file when no run is active. Running `litletter db init` also applies
-supported schema migrations to an existing database.
+Then enable summarization in `litletter.json`:
 
-## Fetching papers
-
-```python
-from datetime import date
-
-from litletter.sources import BioRxivClient, PubMedClient, PubMedDateField
-
-with PubMedClient(email="you@example.com") as pubmed:
-    papers = pubmed.search(
-        '"single cell"[Title/Abstract] AND cancer[Title/Abstract]',
-        since=date(2026, 8, 1),
-        until=date(2026, 8, 9),
-    )
-
-with PubMedClient(
-    email="you@example.com",
-    date_field=PubMedDateField.PUBLICATION,
-) as pubmed:
-    papers_published_in_range = pubmed.search(
-        "cancer[Title/Abstract]",
-        since=date(2026, 8, 1),
-        until=date(2026, 8, 9),
-    )
-
-with BioRxivClient() as biorxiv:
-    preprints = biorxiv.fetch(
-        since=date(2026, 8, 1),
-        until=date(2026, 8, 9),
-    )
+```json
+"summarization": {
+  "enabled": true,
+  "provider": "deepseek-default",
+  "model": "deepseek-v4-flash",
+  "max_words": 100,
+  "audience": "a scientifically literate reader outside the paper's specialty",
+  "failure_policy": "fallback"
+}
 ```
 
-PubMed accepts a native PubMed query. The official bioRxiv API lists records by
-date rather than performing Boolean title/abstract searches, so Litletter's
-matching layer evaluates normalized records locally.
+Use `--no-summarization` on any run to skip it temporarily. Summaries are cached
+so delivery retries do not call the model again.
 
-PubMed date bounds use its Entrez date by default: the date a record entered the
-database, which is appropriate for a daily discovery job. Construct a client
-with `date_field=PubMedDateField.PUBLICATION` when the window should instead
-mean the paper's publication date, as in a retrospective "past month" search.
-Publication mode also enforces the range against Litletter's normalized date,
-which prefers an electronic publication date over a later journal issue date.
+## More information
 
-## Matching papers
-
-Parse a query once and reuse it for papers from either source:
-
-```python
-from litletter import filter_papers, parse_query
-
-query = parse_query(
-    'title:("spatial transcriptomics" OR single-cell) '
-    "AND abstract:(cancer OR tumour) "
-    "AND NOT title:review"
-)
-
-matching_papers = filter_papers(papers, query)
-```
-
-The query language supports:
-
-- Case-insensitive `AND`, `OR`, and unary `NOT`.
-- Parentheses, with precedence `NOT`, then `AND`, then `OR`.
-- Quoted phrases, including `\"` and `\\` escapes.
-- `title:`, `abstract:`, `title_abstract:`, `journal:`, `journal_group:`,
-  `category:`, and `publication_type:` field prefixes.
-- Field-scoped groups such as `title:(cancer OR tumour)`.
-
-Unqualified terms search the title and abstract. Unquoted terms match complete
-words, while quoted phrases match a contiguous substring. Matching is Unicode
-case-insensitive and collapses runs of whitespace. Boolean operators must be
-explicit; Litletter does not insert an implicit `AND` between adjacent terms.
-
-Use `publication_type:original_research` to retain research articles and
-bioRxiv preprints while excluding PubMed reviews, systematic reviews,
-meta-analyses, news, editorials, comments, letters, corrections, retractions,
-guidelines, and other non-research formats. PubMed filtering uses its controlled
-publication-type metadata rather than title keywords. Exact PubMed types are
-also searchable, for example `publication_type:"Randomized Controlled Trial"`.
-
-### Journals and journal groups
-
-`journal:` performs exact, case-insensitive identity matching rather than a
-substring search. For PubMed records it can match the full journal title,
-abbreviation, NLM ID, or retained ISSN. A field-scoped group is useful for a
-short ad hoc list:
-
-```python
-query = parse_query("title_abstract:cancer AND journal:(Nature OR Science OR Cell)")
-```
-
-Litletter also ships versioned, sourced collections for publisher families and
-the Nature Index:
-
-```python
-from litletter import get_journal_catalog, parse_query
-
-catalog = get_journal_catalog()
-catalog.names()
-catalog.get("nature_portfolio").journals
-
-query = parse_query("title_abstract:cancer AND journal_group:nature_index_current")
-```
-
-The built-in canonical group names are `flagship_nsc`, `nature_research`,
-`nature_reviews`, `nature_communications`, `nature_progress`, `scientific_series`,
-`npj_series`, `nature_portfolio`, `science_family`, `cell_press`, and
-`nature_index_2026`. The aliases `nsc`, `nature_family`, `nature_index`, and
-`nature_index_current` are also accepted. Each group records its source URL and
-snapshot date so a newsletter query does not silently change when a publisher
-updates its list.
-
-The Nature Index group represents publication membership only. Nature Index
-also applies article-type rules when calculating its metrics; Litletter does
-not attempt to reproduce those rules.
-
-`category:` matches bioRxiv's supplied category locally, for example
-`category:"systems biology"`. PubMed records do not have that field.
-
-## Discovering matching papers
-
-The discovery helper connects fetching and local matching:
-
-```python
-from datetime import date
-
-from litletter import discover_papers, parse_query
-from litletter.sources import BioRxivClient, PubMedClient
-
-query = parse_query(
-    'title:("spatial transcriptomics" OR single-cell) AND abstract:(cancer OR tumour)'
-)
-
-with (
-    PubMedClient(email="you@example.com") as pubmed,
-    BioRxivClient() as biorxiv,
-):
-    papers = discover_papers(
-        query,
-        since=date(2026, 8, 1),
-        until=date(2026, 8, 9),
-        pubmed=pubmed,
-        biorxiv=biorxiv,
-    )
-```
-
-Litletter compiles a broad positive PubMed selector to reduce downloads, then
-applies the original query locally. Negative-only branches are not used for
-candidate selection because doing so could exclude valid results. When no safe
-positive selector exists, PubMed records are fetched using only the requested
-Entrez date range. Candidate limits can be supplied for previews, but they are
-applied before local filtering and can therefore reduce the number of matches.
-Journal constraints compile to PubMed's `[Journal]` field; large groups are sent
-with POST automatically.
-
-## Interactive scratchpad
-
-[scripts/demo.py](scripts/demo.py) is a deliberately simple, block-oriented
-scratchpad for exploring Litletter from an existing interactive Python session.
-Set your NCBI contact email first:
-
-```console
-export LITLETTER_NCBI_EMAIL="you@example.com"
-```
-
-Open the script in your editor and send its blocks to IPython. The variables
-remain available for inspection, including `query`, `pubmed_candidate_query`,
-the source clients, and the final `papers` list. Edit `query_text`, the date
-range, and candidate limits directly in the first blocks. An optional NCBI API
-key can be supplied through `LITLETTER_NCBI_API_KEY`.
-
-The scratchpad enables `INFO` logging for the `litletter` package, showing the
-date window, PubMed selector, source candidate counts, local match counts, and
-the final total while discovery runs. Change `logging.INFO` to `logging.DEBUG`
-in the first block to additionally see PubMed batches and source pagination.
-
-## Development
-
-Contributors can create the pinned Python 3.12 environment and run the complete
-verification suite with [uv](https://docs.astral.sh/uv/):
-
-```console
-uv sync
-uv run pytest
-uv run ruff check .
-uv run ruff format --check .
-uv build
-```
-
-The editable package and `litletter` command are installed into `.venv` by
-`uv sync`. Activate that environment or prefix development commands with
-`uv run`.
+- [DEVELOPMENT.md](DEVELOPMENT.md) covers advanced configuration, query and
+  fetching behavior, delivery recovery, the Python API, and development.
+- [`examples/litletter.json`](examples/litletter.json) is a complete newsletter
+  configuration.
+- [`examples/app.json`](examples/app.json) shows all provider profiles.
