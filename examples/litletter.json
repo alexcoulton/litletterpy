@@ -1,9 +1,9 @@
 {
   "version": 2,
   "database": "state/litletter.sqlite3",
-  "author_groups": "author_groups.json",
+  "author_groups": "builtin:cancer_researchers",
   "newsletter": {
-    "title": "My Litletter",
+    "title": "Cancer Research Litletter",
     "from": "Litletter <newsletter@updates.example.com>",
     "to": ["you@example.com"],
     "timezone": "Europe/London",
@@ -32,36 +32,37 @@
   "categories": [
     {
       "id": "nsc-cancer",
-      "name": "Nature, Science and Cell: Cancer",
+      "name": "Cancer in Nature, Science and Cell",
       "query": "title_abstract:cancer AND journal_group:flagship_nsc AND publication_type:original_research",
       "sources": ["pubmed"]
     },
     {
-      "id": "cancer-preprints",
-      "name": "Cancer Preprints",
-      "query": "title_abstract:cancer AND publication_type:original_research",
-      "sources": ["biorxiv", "medrxiv"]
+      "id": "nsc-ai",
+      "name": "AI in NSC",
+      "query": "(title_abstract:AI OR title_abstract:LLM OR title_abstract:'large-language model' OR title_abstract:'large language model') AND journal_group:flagship_nsc AND publication_type:original_research",
+      "sources": ["pubmed"]
     },
     {
-      "id": "machine-learning-preprints",
-      "name": "Machine Learning Preprints",
-      "query": "title_abstract:'machine learning' AND category:(cs.LG OR stat.ML)",
-      "sources": ["arxiv"]
+      "id": "nsc-family-paediatric-car-t",
+      "name": "Paediatric CAR T in NSC and Subjournals",
+      "query": "(title_abstract:paediatric OR title_abstract:pediatric) AND (title_abstract:'CAR T' OR title_abstract:'CAR-T') AND (journal_group:nature_portfolio OR journal_group:science_family OR journal_group:cell_press) AND publication_type:original_research",
+      "sources": ["pubmed"]
     },
     {
-      "id": "author-watchlist",
-      "name": "Author Watchlist",
-      "query": "author_group:watchlist",
+      "id": "nsc-family-cancer-evolution",
+      "name": "Cancer Evolution in NSC and Subjournals",
+      "query": "title_abstract:'cancer evolution' AND (journal_group:nature_portfolio OR journal_group:science_family OR journal_group:cell_press) AND publication_type:original_research",
+      "sources": ["pubmed"]
+    },
+    {
+      "id": "cancer-researcher-watchlist",
+      "name": "Cancer Researcher Watchlist",
+      "query": "author_group:cancer-watchlist",
       "sources": ["pubmed", "biorxiv", "medrxiv", "arxiv"]
     }
   ],
   "summarization": {
-    "enabled": true,
-    "provider": "deepseek-default",
-    "model": "deepseek-v4-flash",
-    "max_words": 100,
-    "audience": "a scientifically literate reader outside the paper's specialty",
-    "failure_policy": "fallback"
+    "enabled": false
   },
   "delivery": {
     "provider": "resend-default"
