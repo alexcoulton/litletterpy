@@ -49,6 +49,20 @@ class BioRxivConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class MedRxivConfig:
+    """medRxiv access settings."""
+
+    enabled: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ArXivConfig:
+    """arXiv access settings."""
+
+    enabled: bool
+
+
+@dataclass(frozen=True, slots=True)
 class DiscoveryConfig:
     """Date-window behavior for recurring discovery."""
 
@@ -95,6 +109,8 @@ class LitletterConfig:
     newsletter: NewsletterConfig
     pubmed: PubMedConfig
     biorxiv: BioRxivConfig
+    medrxiv: MedRxivConfig
+    arxiv: ArXivConfig
     discovery: DiscoveryConfig
     categories: tuple[CategoryConfig, ...]
     summarization: SummarizationConfig
@@ -143,9 +159,11 @@ def parse_config(payload: Any, *, path: Path) -> LitletterConfig:
     database = database.resolve()
 
     newsletter = _parse_newsletter(root.get("newsletter"))
-    pubmed, biorxiv = _parse_sources(root.get("sources"))
+    pubmed, biorxiv, medrxiv, arxiv = _parse_sources(root.get("sources"))
     discovery = _parse_discovery(root.get("discovery"))
-    categories = _parse_categories(root.get("categories"), pubmed, biorxiv)
+    categories = _parse_categories(
+        root.get("categories"), pubmed, biorxiv, medrxiv, arxiv
+    )
     summarization = _parse_summarization(root.get("summarization", {}))
     delivery = _parse_delivery(root.get("delivery"))
     return LitletterConfig(
@@ -154,6 +172,8 @@ def parse_config(payload: Any, *, path: Path) -> LitletterConfig:
         newsletter=newsletter,
         pubmed=pubmed,
         biorxiv=biorxiv,
+        medrxiv=medrxiv,
+        arxiv=arxiv,
         discovery=discovery,
         categories=categories,
         summarization=summarization,
@@ -185,6 +205,8 @@ def newsletter_config_template(
                 "provider": pubmed_provider,
             },
             "biorxiv": {"enabled": False},
+            "medrxiv": {"enabled": False},
+            "arxiv": {"enabled": False},
         },
         "discovery": {
             "initial_lookback_days": 30,
@@ -278,9 +300,11 @@ def _parse_newsletter(value: Any) -> NewsletterConfig:
     )
 
 
-def _parse_sources(value: Any) -> tuple[PubMedConfig, BioRxivConfig]:
+def _parse_sources(
+    value: Any,
+) -> tuple[PubMedConfig, BioRxivConfig, MedRxivConfig, ArXivConfig]:
     raw = _object(value, "sources")
-    _only_keys(raw, {"pubmed", "biorxiv"}, "sources")
+    _only_keys(raw, {"pubmed", "biorxiv", "medrxiv", "arxiv"}, "sources")
 
     raw_pubmed = _object(raw.get("pubmed", {}), "sources.pubmed")
     _only_keys(raw_pubmed, {"enabled", "provider"}, "sources.pubmed")
@@ -300,13 +324,24 @@ def _parse_sources(value: Any) -> tuple[PubMedConfig, BioRxivConfig]:
     biorxiv_enabled = _boolean(
         raw_biorxiv.get("enabled", True), "sources.biorxiv.enabled"
     )
+    medrxiv_enabled = _parse_simple_source(raw, "medrxiv", default=False)
+    arxiv_enabled = _parse_simple_source(raw, "arxiv", default=False)
     return (
         PubMedConfig(
             pubmed_enabled,
             pubmed_provider.strip() if isinstance(pubmed_provider, str) else None,
         ),
         BioRxivConfig(biorxiv_enabled),
+        MedRxivConfig(medrxiv_enabled),
+        ArXivConfig(arxiv_enabled),
     )
+
+
+def _parse_simple_source(sources: dict[str, Any], name: str, *, default: bool) -> bool:
+    location = f"sources.{name}"
+    raw = _object(sources.get(name, {}), location)
+    _only_keys(raw, {"enabled"}, location)
+    return _boolean(raw.get("enabled", default), f"{location}.enabled")
 
 
 def _parse_discovery(value: Any) -> DiscoveryConfig:
@@ -329,6 +364,8 @@ def _parse_categories(
     value: Any,
     pubmed: PubMedConfig,
     biorxiv: BioRxivConfig,
+    medrxiv: MedRxivConfig,
+    arxiv: ArXivConfig,
 ) -> tuple[CategoryConfig, ...]:
     if not isinstance(value, list) or not value:
         raise ConfigurationError("categories must be a non-empty array")
@@ -365,6 +402,10 @@ def _parse_categories(
             raise ConfigurationError(f"{location} uses disabled source 'pubmed'")
         if PaperSource.BIORXIV in sources and not biorxiv.enabled:
             raise ConfigurationError(f"{location} uses disabled source 'biorxiv'")
+        if PaperSource.MEDRXIV in sources and not medrxiv.enabled:
+            raise ConfigurationError(f"{location} uses disabled source 'medrxiv'")
+        if PaperSource.ARXIV in sources and not arxiv.enabled:
+            raise ConfigurationError(f"{location} uses disabled source 'arxiv'")
         categories.append(
             CategoryConfig(
                 id=category_id,

@@ -1,6 +1,7 @@
 """Parse and evaluate source-independent Litletter queries."""
 
 from litletter.errors import QuerySyntaxError
+from litletter.query._arxiv import compile_arxiv_candidate_query
 from litletter.query._ast import And, Expression, Field, Not, Or, Query, Term
 from litletter.query._evaluator import evaluate, filter_papers
 from litletter.query._parser import parse_query
@@ -15,6 +16,7 @@ __all__ = [
     "Query",
     "QuerySyntaxError",
     "Term",
+    "compile_arxiv_candidate_query",
     "compile_pubmed_candidate_query",
     "evaluate",
     "filter_papers",

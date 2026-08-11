@@ -21,7 +21,8 @@ def test_fetch_paginates_and_normalizes_records(fixture_dir: Path) -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.headers["user-agent"] == "litletter/0.1"
-        cursor = int(request.url.path.rsplit("/", 1)[-1])
+        assert request.url.path.startswith("/details/biorxiv/")
+        cursor = int(request.url.path.rstrip("/").rsplit("/", 2)[-2])
         cursors.append(cursor)
         return httpx.Response(200, json=pages[cursor])
 

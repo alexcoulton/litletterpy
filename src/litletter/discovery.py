@@ -10,6 +10,7 @@ from typing import Protocol
 from litletter.models import Paper
 from litletter.query import (
     Query,
+    compile_arxiv_candidate_query,
     compile_pubmed_candidate_query,
     filter_papers,
     parse_query,
@@ -37,9 +38,20 @@ class _PubMedSource(Protocol):
     ) -> list[Paper]: ...
 
 
-class _BioRxivSource(Protocol):
+class _DateSource(Protocol):
     def fetch(
         self,
+        *,
+        since: date,
+        until: date,
+        max_results: int | None = None,
+    ) -> list[Paper]: ...
+
+
+class _ArXivSource(_DateSource, Protocol):
+    def search(
+        self,
+        query: str,
         *,
         since: date,
         until: date,
@@ -53,26 +65,37 @@ def discover_papers(
     since: date,
     until: date,
     pubmed: _PubMedSource | None = None,
-    biorxiv: _BioRxivSource | None = None,
+    biorxiv: _DateSource | None = None,
+    medrxiv: _DateSource | None = None,
+    arxiv: _ArXivSource | None = None,
     max_pubmed_candidates: int | None = None,
     max_biorxiv_candidates: int | None = None,
+    max_medrxiv_candidates: int | None = None,
+    max_arxiv_candidates: int | None = None,
 ) -> list[Paper]:
     """Fetch and locally match papers from the supplied source clients.
 
     At least one source client is required. Candidate limits apply before local
     filtering and are intended for previews or bounded test runs.
     """
-    if pubmed is None and biorxiv is None:
+    if pubmed is None and biorxiv is None and medrxiv is None and arxiv is None:
         raise ValueError("at least one source client is required")
     if since > until:
         raise ValueError("since must not be after until")
     _validate_limit("max_pubmed_candidates", max_pubmed_candidates)
     _validate_limit("max_biorxiv_candidates", max_biorxiv_candidates)
+    _validate_limit("max_medrxiv_candidates", max_medrxiv_candidates)
+    _validate_limit("max_arxiv_candidates", max_arxiv_candidates)
 
     parsed = parse_query(query) if isinstance(query, str) else query
     source_names = [
         name
-        for name, client in (("PubMed", pubmed), ("bioRxiv", biorxiv))
+        for name, client in (
+            ("PubMed", pubmed),
+            ("bioRxiv", biorxiv),
+            ("medRxiv", medrxiv),
+            ("arXiv", arxiv),
+        )
         if client is not None
     ]
     _LOGGER.info(
@@ -117,15 +140,49 @@ def discover_papers(
         matches.extend(source_matches)
 
     if biorxiv is not None:
-        _LOGGER.info("Fetching bioRxiv candidates by date")
-        candidates = biorxiv.fetch(
-            since=since,
-            until=until,
-            max_results=max_biorxiv_candidates,
+        matches.extend(
+            _fetch_date_source(
+                "bioRxiv",
+                biorxiv,
+                parsed,
+                since=since,
+                until=until,
+                max_results=max_biorxiv_candidates,
+            )
         )
+
+    if medrxiv is not None:
+        matches.extend(
+            _fetch_date_source(
+                "medRxiv",
+                medrxiv,
+                parsed,
+                since=since,
+                until=until,
+                max_results=max_medrxiv_candidates,
+            )
+        )
+
+    if arxiv is not None:
+        selector = compile_arxiv_candidate_query(parsed)
+        if selector is None:
+            _LOGGER.info("arXiv has no safe positive selector; fetching by date only")
+            candidates = arxiv.fetch(
+                since=since,
+                until=until,
+                max_results=max_arxiv_candidates,
+            )
+        else:
+            _LOGGER.info("Fetching arXiv candidates with selector: %s", selector)
+            candidates = arxiv.search(
+                selector,
+                since=since,
+                until=until,
+                max_results=max_arxiv_candidates,
+            )
         source_matches = filter_papers(candidates, parsed)
         _LOGGER.info(
-            "bioRxiv fetched %d candidates; %d matched locally",
+            "arXiv fetched %d candidates; %d matched locally",
             len(candidates),
             len(source_matches),
         )
@@ -146,6 +203,31 @@ def _sort_papers(papers: Iterable[Paper]) -> list[Paper]:
         ),
         reverse=True,
     )
+
+
+def _fetch_date_source(
+    name: str,
+    source: _DateSource,
+    query: Query,
+    *,
+    since: date,
+    until: date,
+    max_results: int | None,
+) -> list[Paper]:
+    _LOGGER.info("Fetching %s candidates by date", name)
+    candidates = source.fetch(
+        since=since,
+        until=until,
+        max_results=max_results,
+    )
+    matches = filter_papers(candidates, query)
+    _LOGGER.info(
+        "%s fetched %d candidates; %d matched locally",
+        name,
+        len(candidates),
+        len(matches),
+    )
+    return matches
 
 
 def _validate_limit(name: str, value: int | None) -> None:

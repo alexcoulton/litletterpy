@@ -7,11 +7,13 @@ from pathlib import Path
 import pytest
 
 from litletter.config import (
+    ArXivConfig,
     BioRxivConfig,
     CategoryConfig,
     DeliveryConfig,
     DiscoveryConfig,
     LitletterConfig,
+    MedRxivConfig,
     NewsletterConfig,
     PubMedConfig,
     SummarizationConfig,
@@ -37,6 +39,7 @@ from litletter.summarization import (
 class FakePubMed:
     papers: list[Paper]
     searches: list[tuple[str, date | None, date | None]] = field(default_factory=list)
+    fetches: list[tuple[date, date, int | None]] = field(default_factory=list)
 
     def search(
         self,
@@ -56,6 +59,7 @@ class FakePubMed:
         until: date,
         max_results: int | None = None,
     ) -> list[Paper]:
+        self.fetches.append((since, until, max_results))
         return self.papers
 
 
@@ -113,6 +117,8 @@ def config(tmp_path: Path) -> LitletterConfig:
         ),
         pubmed=PubMedConfig(True, "pubmed-default"),
         biorxiv=BioRxivConfig(False),
+        medrxiv=MedRxivConfig(False),
+        arxiv=ArXivConfig(False),
         discovery=DiscoveryConfig(initial_lookback_days=30, overlap_days=2),
         categories=(
             CategoryConfig(
@@ -264,6 +270,62 @@ def test_dry_run_advances_discovery_but_does_not_create_edition(
     assert database.open_edition() is None
     assert len(database.unsent_papers()) == 1
     assert database.last_successful_until() == date(2026, 8, 9)
+    database.close()
+
+
+def test_run_discovers_medrxiv_and_arxiv_categories(tmp_path: Path) -> None:
+    settings = config(tmp_path)
+    settings = replace(
+        settings,
+        medrxiv=MedRxivConfig(True),
+        arxiv=ArXivConfig(True),
+        categories=(
+            CategoryConfig(
+                id="preprints",
+                name="Preprints",
+                query="title_abstract:cancer",
+                sources=(PaperSource.MEDRXIV, PaperSource.ARXIV),
+            ),
+        ),
+    )
+    medrxiv_paper = replace(
+        paper(),
+        source=PaperSource.MEDRXIV,
+        source_id="med-1",
+        doi="10.1101/med-1",
+        url="https://www.medrxiv.org/content/10.1101/med-1",
+    )
+    arxiv_paper = replace(
+        paper(),
+        source=PaperSource.ARXIV,
+        source_id="2608.12345",
+        doi=None,
+        url="https://arxiv.org/abs/2608.12345",
+    )
+    medrxiv = FakePubMed([medrxiv_paper])
+    arxiv = FakePubMed([arxiv_paper])
+    database = open_database(tmp_path)
+
+    result = run_once(
+        settings,
+        database,
+        pubmed=None,
+        biorxiv=None,
+        medrxiv=medrxiv,
+        arxiv=arxiv,
+        mailer=None,
+        today=date(2026, 8, 9),
+        bootstrap=True,
+        dry_run=True,
+    )
+
+    assert result.matched == 2
+    assert result.unsent == 2
+    assert medrxiv.searches == []
+    assert medrxiv.fetches == [(date(2026, 7, 10), date(2026, 8, 9), None)]
+    assert arxiv.searches == [
+        ("(ti:cancer OR abs:cancer)", date(2026, 7, 10), date(2026, 8, 9))
+    ]
     database.close()
 
 

@@ -48,9 +48,20 @@ class PubMedSource(Protocol):
     ) -> list[Paper]: ...
 
 
-class BioRxivSource(Protocol):
+class DateSource(Protocol):
     def fetch(
         self,
+        *,
+        since: date,
+        until: date,
+        max_results: int | None = None,
+    ) -> list[Paper]: ...
+
+
+class ArXivSource(DateSource, Protocol):
+    def search(
+        self,
+        query: str,
         *,
         since: date,
         until: date,
@@ -111,8 +122,10 @@ def run_once(
     database: Database,
     *,
     pubmed: PubMedSource | None,
-    biorxiv: BioRxivSource | None,
+    biorxiv: DateSource | None,
     mailer: Mailer | None,
+    medrxiv: DateSource | None = None,
+    arxiv: ArXivSource | None = None,
     summarizer: Summarizer | None = None,
     today: date,
     bootstrap: bool = False,
@@ -146,6 +159,8 @@ def run_once(
             until=until,
             pubmed=pubmed,
             biorxiv=biorxiv,
+            medrxiv=medrxiv,
+            arxiv=arxiv,
         )
         items = database.unsent_papers()
         if not items:
@@ -233,19 +248,29 @@ def discover_categories(
     since: date,
     until: date,
     pubmed: PubMedSource | None,
-    biorxiv: BioRxivSource | None,
+    biorxiv: DateSource | None,
+    medrxiv: DateSource | None,
+    arxiv: ArXivSource | None,
 ) -> int:
-    """Discover every category, fetching bioRxiv only once per run."""
-    needs_biorxiv = any(
-        PaperSource.BIORXIV in category.sources for category in categories
-    )
-    if needs_biorxiv and biorxiv is None:
-        raise ValueError("configured bioRxiv categories require a bioRxiv client")
-    biorxiv_candidates = (
-        biorxiv.fetch(since=since, until=until)
-        if needs_biorxiv and biorxiv is not None
-        else []
-    )
+    """Discover every category, fetching date-feed sources once per run."""
+    date_sources = {
+        PaperSource.BIORXIV: ("bioRxiv", biorxiv),
+        PaperSource.MEDRXIV: ("medRxiv", medrxiv),
+    }
+    date_candidates: dict[PaperSource, list[Paper]] = {}
+    for source, (name, client) in date_sources.items():
+        needed = any(source in category.sources for category in categories)
+        if needed and client is None:
+            raise ValueError(f"configured {name} categories require a {name} client")
+        date_candidates[source] = (
+            client.fetch(since=since, until=until)
+            if needed and client is not None
+            else []
+        )
+    needs_arxiv = any(PaperSource.ARXIV in category.sources for category in categories)
+    if needs_arxiv and arxiv is None:
+        raise ValueError("configured arXiv categories require an arXiv client")
+
     total = 0
     for category in categories:
         matches: dict[tuple[PaperSource, str], Paper] = {}
@@ -259,9 +284,21 @@ def discover_categories(
                 pubmed=pubmed,
             ):
                 matches[(paper.source, paper.source_id)] = paper
-        if PaperSource.BIORXIV in category.sources:
+        for source in (PaperSource.BIORXIV, PaperSource.MEDRXIV):
+            if source not in category.sources:
+                continue
             query = parse_query(category.query)
-            for paper in filter_papers(biorxiv_candidates, query):
+            for paper in filter_papers(date_candidates[source], query):
+                matches[(paper.source, paper.source_id)] = paper
+        if PaperSource.ARXIV in category.sources:
+            if arxiv is None:
+                raise AssertionError("arXiv client validation was bypassed")
+            for paper in discover_papers(
+                category.query,
+                since=since,
+                until=until,
+                arxiv=arxiv,
+            ):
                 matches[(paper.source, paper.source_id)] = paper
         ordered = sorted(
             matches.values(),

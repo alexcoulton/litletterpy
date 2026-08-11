@@ -32,7 +32,7 @@ from litletter.delivery import Mailer, PostmarkMailer, ResendMailer
 from litletter.errors import ConfigurationError, DatabaseError, LitletterError
 from litletter.models import PaperSource
 from litletter.runner import RunResult, enrich_pending_papers, run_once
-from litletter.sources import BioRxivClient, PubMedClient
+from litletter.sources import ArXivClient, BioRxivClient, MedRxivClient, PubMedClient
 from litletter.storage import Database
 from litletter.summarization import DeepSeekSummarizer
 
@@ -358,7 +358,7 @@ def _run(args: argparse.Namespace) -> int:
         Database(config.database) as database,
         ExitStack() as stack,
     ):
-        pubmed, biorxiv = _create_sources(config, app_config, stack)
+        pubmed, biorxiv, medrxiv, arxiv = _create_sources(config, app_config, stack)
         summarizer = (
             None
             if args.no_summarization or not config.summarization.enabled
@@ -373,6 +373,8 @@ def _run(args: argparse.Namespace) -> int:
             database,
             pubmed=pubmed,
             biorxiv=biorxiv,
+            medrxiv=medrxiv,
+            arxiv=arxiv,
             mailer=mailer,
             summarizer=summarizer,
             today=today,
@@ -394,7 +396,12 @@ def _run(args: argparse.Namespace) -> int:
 
 def _create_sources(
     config: LitletterConfig, app_config: AppConfig, stack: ExitStack
-) -> tuple[PubMedClient | None, BioRxivClient | None]:
+) -> tuple[
+    PubMedClient | None,
+    BioRxivClient | None,
+    MedRxivClient | None,
+    ArXivClient | None,
+]:
     configured_sources = {
         source for category in config.categories for source in category.sources
     }
@@ -408,7 +415,13 @@ def _create_sources(
     biorxiv = None
     if PaperSource.BIORXIV in configured_sources:
         biorxiv = stack.enter_context(BioRxivClient())
-    return pubmed, biorxiv
+    medrxiv = None
+    if PaperSource.MEDRXIV in configured_sources:
+        medrxiv = stack.enter_context(MedRxivClient())
+    arxiv = None
+    if PaperSource.ARXIV in configured_sources:
+        arxiv = stack.enter_context(ArXivClient())
+    return pubmed, biorxiv, medrxiv, arxiv
 
 
 def _create_summarizer(

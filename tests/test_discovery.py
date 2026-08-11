@@ -242,6 +242,100 @@ def test_discovery_uses_date_only_pubmed_fetch_without_positive_selector() -> No
     assert pubmed.fetches == [(start, start, None)]
 
 
+def test_discovery_fetches_and_filters_medrxiv_by_date() -> None:
+    today = date(2026, 8, 9)
+    medrxiv = FakeBioRxiv(
+        [
+            paper(
+                PaperSource.MEDRXIV,
+                "med-match",
+                "A cancer preprint",
+                "Original research",
+                today,
+            ),
+            paper(
+                PaperSource.MEDRXIV,
+                "med-other",
+                "A cardiovascular preprint",
+                "Original research",
+                today,
+            ),
+        ]
+    )
+
+    matches = discover_papers(
+        "title:cancer",
+        since=today,
+        until=today,
+        medrxiv=medrxiv,
+        max_medrxiv_candidates=25,
+    )
+
+    assert [match.source_id for match in matches] == ["med-match"]
+    assert medrxiv.fetches == [(today, today, 25)]
+
+
+def test_discovery_compiles_arxiv_selector_then_filters_locally() -> None:
+    today = date(2026, 8, 9)
+    arxiv = FakePubMed(
+        [
+            paper(
+                PaperSource.ARXIV,
+                "arxiv-match",
+                "A cancer atlas",
+                "Original experiment",
+                today,
+            ),
+            paper(
+                PaperSource.ARXIV,
+                "arxiv-review",
+                "A cancer atlas",
+                "A review",
+                today,
+            ),
+        ]
+    )
+
+    matches = discover_papers(
+        "title:cancer AND NOT abstract:review",
+        since=today,
+        until=today,
+        arxiv=arxiv,
+        max_arxiv_candidates=50,
+    )
+
+    assert [match.source_id for match in matches] == ["arxiv-match"]
+    assert arxiv.searches == [("ti:cancer", today, today, 50)]
+    assert arxiv.fetches == []
+
+
+def test_discovery_uses_date_only_arxiv_fetch_without_positive_selector() -> None:
+    today = date(2026, 8, 9)
+    arxiv = FakePubMed(
+        [
+            paper(
+                PaperSource.ARXIV,
+                "original",
+                "An original experiment",
+                None,
+                today,
+            ),
+            paper(PaperSource.ARXIV, "review", "A review", None, today),
+        ]
+    )
+
+    matches = discover_papers(
+        "NOT review",
+        since=today,
+        until=today,
+        arxiv=arxiv,
+    )
+
+    assert [match.source_id for match in matches] == ["original"]
+    assert arxiv.searches == []
+    assert arxiv.fetches == [(today, today, None)]
+
+
 def test_discovery_requires_a_source_and_valid_arguments() -> None:
     today = date(2026, 8, 9)
 
@@ -261,4 +355,12 @@ def test_discovery_requires_a_source_and_valid_arguments() -> None:
             until=today,
             pubmed=FakePubMed([]),
             max_pubmed_candidates=-1,
+        )
+    with pytest.raises(ValueError, match="max_arxiv_candidates"):
+        discover_papers(
+            "cancer",
+            since=today,
+            until=today,
+            arxiv=FakePubMed([]),
+            max_arxiv_candidates=-1,
         )

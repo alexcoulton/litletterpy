@@ -1,8 +1,8 @@
 # Litletter
 
 Litletter sends you a daily email containing newly published papers that match
-your interests. It searches PubMed and bioRxiv, groups papers into your chosen
-categories, and remembers what it has already sent.
+your interests. It searches PubMed, bioRxiv, medRxiv, and arXiv, groups papers
+into your chosen categories, and remembers what it has already sent.
 
 ## Suggested setup
 
@@ -98,10 +98,28 @@ unique ID, a heading, a search query, and the sources to search:
     "id": "cancer-preprints",
     "name": "Cancer Preprints",
     "query": "title_abstract:cancer AND publication_type:original_research",
-    "sources": ["biorxiv"]
+    "sources": ["biorxiv", "medrxiv"]
+  },
+  {
+    "id": "machine-learning-preprints",
+    "name": "Machine Learning Preprints",
+    "query": "title_abstract:'machine learning' AND category:(cs.LG OR stat.ML)",
+    "sources": ["arxiv"]
   }
 ]
 ```
+
+Enable each source used by a category in the `sources` section of the same
+file. PubMed is enabled in the starter configuration; the preprint sources are
+opt-in:
+
+```json
+"biorxiv": {"enabled": true},
+"medrxiv": {"enabled": true},
+"arxiv": {"enabled": true}
+```
+
+bioRxiv, medRxiv, and arXiv do not require API keys.
 
 Queries support `AND`, `OR`, `NOT`, parentheses, and phrases in single or double
 quotes. The most useful search fields are:
@@ -113,7 +131,7 @@ quotes. The most useful search fields are:
   `nature_index_current`
 - `publication_type:original_research` to exclude reviews, news, editorials,
   corrections, and other non-research material
-- `category:` for a bioRxiv subject category
+- `category:` for a bioRxiv, medRxiv, or arXiv subject category
 
 For example:
 
@@ -133,8 +151,7 @@ escaping:
 ```
 
 Categories appear in the order listed. A paper matching several categories is
-shown only once, under its first match. If you add a bioRxiv category, also set
-`sources.biorxiv.enabled` to `true` in `./litletter.json`.
+shown only once, under its first match.
 
 ## Preview and send
 

@@ -135,6 +135,8 @@ def test_init_creates_complete_starter_without_overwriting(
         "publication_type:original_research" in (newsletter["categories"][0]["query"])
     )
     assert newsletter["newsletter"]["include_abstracts"] is False
+    assert newsletter["sources"]["medrxiv"] == {"enabled": False}
+    assert newsletter["sources"]["arxiv"] == {"enabled": False}
     assert app_config.stat().st_mode & 0o777 == 0o600
     assert (config.parent / "state" / "litletter.sqlite3").exists()
     assert "Next: edit the email addresses" in capsys.readouterr().out

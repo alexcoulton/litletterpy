@@ -1,4 +1,4 @@
-"""bioRxiv API client."""
+"""bioRxiv and medRxiv API clients."""
 
 from __future__ import annotations
 
@@ -14,11 +14,16 @@ from litletter.sources._http import HttpRequester
 
 _LOGGER = logging.getLogger(__name__)
 
-_DETAIL_URL = "https://connect.biorxiv.org/api/detail"
+_DETAIL_URL = "https://api.biorxiv.org/details"
 
 
-class BioRxivClient:
-    """Fetch and normalize bioRxiv papers from a date interval."""
+class _RxivClient:
+    """Fetch and normalize one Rxiv server's papers from a date interval."""
+
+    _server: str
+    _source: PaperSource
+    _display_name: str
+    _content_url: str
 
     def __init__(
         self,
@@ -29,7 +34,7 @@ class BioRxivClient:
         http_client: httpx.Client | None = None,
     ) -> None:
         self._http = HttpRequester(
-            source="bioRxiv",
+            source=self._display_name,
             user_agent="litletter/0.1",
             timeout=timeout,
             max_retries=max_retries,
@@ -37,7 +42,7 @@ class BioRxivClient:
             client=http_client,
         )
 
-    def __enter__(self) -> BioRxivClient:
+    def __enter__(self) -> _RxivClient:
         return self
 
     def __exit__(self, *_: object) -> None:
@@ -54,7 +59,7 @@ class BioRxivClient:
         until: date,
         max_results: int | None = None,
     ) -> list[Paper]:
-        """Return bioRxiv records posted within an inclusive date interval."""
+        """Return records posted within an inclusive date interval."""
         if since > until:
             raise ValueError("since must not be after until")
         if max_results is not None and max_results < 0:
@@ -66,12 +71,18 @@ class BioRxivClient:
         total: int | None = None
         papers: list[Paper] = []
         while total is None or cursor < total:
-            _LOGGER.debug("Requesting bioRxiv page at cursor %d", cursor)
-            url = f"{_DETAIL_URL}/{since.isoformat()}/{until.isoformat()}/{cursor}"
+            _LOGGER.debug("Requesting %s page at cursor %d", self._display_name, cursor)
+            url = (
+                f"{_DETAIL_URL}/{self._server}/{since.isoformat()}/"
+                f"{until.isoformat()}/{cursor}/json"
+            )
             response = self._http.request("GET", url)
-            page, page_total = _parse_biorxiv_response(response)
+            page, page_total = _parse_rxiv_response(
+                response, source_name=self._display_name
+            )
             _LOGGER.debug(
-                "bioRxiv returned %d records at cursor %d of %d total",
+                "%s returned %d records at cursor %d of %d total",
+                self._display_name,
                 len(page),
                 cursor,
                 page_total,
@@ -83,7 +94,7 @@ class BioRxivClient:
 
             remaining = None if max_results is None else max_results - len(papers)
             selected = page if remaining is None else page[:remaining]
-            papers.extend(_parse_biorxiv_record(record) for record in selected)
+            papers.extend(self._parse_record(record) for record in selected)
             cursor += len(page)
             if max_results is not None and len(papers) >= max_results:
                 break
@@ -94,9 +105,64 @@ class BioRxivClient:
             reverse=True,
         )
 
+    def _parse_record(self, record: dict[str, Any]) -> Paper:
+        try:
+            doi = _required_string(record, "doi")
+            title = _required_string(record, "title")
+            posted_at = date.fromisoformat(_required_string(record, "date"))
+            version_value = record.get("version")
+            version = int(version_value) if version_value not in (None, "") else None
+            if version is not None and version < 1:
+                raise ValueError("version must be positive")
+        except (TypeError, ValueError) as exc:
+            raise ResponseParseError(
+                f"{self._display_name} returned an invalid paper record"
+            ) from exc
 
-def _parse_biorxiv_response(
-    response: httpx.Response,
+        abstract = _optional_string(
+            record.get("abstract"), source_name=self._display_name
+        )
+        category = _optional_string(
+            record.get("category"), source_name=self._display_name
+        )
+        authors = _parse_authors(record.get("authors"), source_name=self._display_name)
+        version_suffix = f"v{version}" if version is not None else ""
+        return Paper(
+            source=self._source,
+            source_id=doi,
+            title=title,
+            abstract=abstract,
+            authors=authors,
+            published_at=posted_at,
+            updated_at=None,
+            doi=doi,
+            url=f"{self._content_url}/{doi}{version_suffix}",
+            category=category,
+            version=version,
+            publication_types=("Preprint",),
+        )
+
+
+class BioRxivClient(_RxivClient):
+    """Fetch and normalize bioRxiv papers from a date interval."""
+
+    _server = "biorxiv"
+    _source = PaperSource.BIORXIV
+    _display_name = "bioRxiv"
+    _content_url = "https://www.biorxiv.org/content"
+
+
+class MedRxivClient(_RxivClient):
+    """Fetch and normalize medRxiv papers from a date interval."""
+
+    _server = "medrxiv"
+    _source = PaperSource.MEDRXIV
+    _display_name = "medRxiv"
+    _content_url = "https://www.medrxiv.org/content"
+
+
+def _parse_rxiv_response(
+    response: httpx.Response, *, source_name: str
 ) -> tuple[list[dict[str, Any]], int]:
     try:
         payload = response.json()
@@ -110,43 +176,11 @@ def _parse_biorxiv_response(
             raise TypeError("collection must be a list of objects")
         total = int(messages[0]["total"])
     except (KeyError, TypeError, ValueError) as exc:
-        raise ResponseParseError("bioRxiv returned malformed JSON") from exc
+        raise ResponseParseError(f"{source_name} returned malformed JSON") from exc
     return records, total
 
 
-def _parse_biorxiv_record(record: dict[str, Any]) -> Paper:
-    try:
-        doi = _required_string(record, "doi")
-        title = _required_string(record, "title")
-        posted_at = date.fromisoformat(_required_string(record, "date"))
-        version_value = record.get("version")
-        version = int(version_value) if version_value not in (None, "") else None
-        if version is not None and version < 1:
-            raise ValueError("version must be positive")
-    except (TypeError, ValueError) as exc:
-        raise ResponseParseError("bioRxiv returned an invalid paper record") from exc
-
-    abstract = _optional_string(record.get("abstract"))
-    category = _optional_string(record.get("category"))
-    authors = _parse_authors(record.get("authors"))
-    version_suffix = f"v{version}" if version is not None else ""
-    return Paper(
-        source=PaperSource.BIORXIV,
-        source_id=doi,
-        title=title,
-        abstract=abstract,
-        authors=authors,
-        published_at=posted_at,
-        updated_at=None,
-        doi=doi,
-        url=f"https://www.biorxiv.org/content/{doi}{version_suffix}",
-        category=category,
-        version=version,
-        publication_types=("Preprint",),
-    )
-
-
-def _parse_authors(value: Any) -> tuple[Author, ...]:
+def _parse_authors(value: Any, *, source_name: str) -> tuple[Author, ...]:
     if value is None:
         return ()
     if isinstance(value, str):
@@ -154,7 +188,7 @@ def _parse_authors(value: Any) -> tuple[Author, ...]:
     elif isinstance(value, list) and all(isinstance(name, str) for name in value):
         names = value
     else:
-        raise ResponseParseError("bioRxiv paper has an invalid authors field")
+        raise ResponseParseError(f"{source_name} paper has an invalid authors field")
     return tuple(Author(name=name.strip()) for name in names if name.strip())
 
 
@@ -165,10 +199,10 @@ def _required_string(record: dict[str, Any], key: str) -> str:
     return " ".join(value.split())
 
 
-def _optional_string(value: Any) -> str | None:
+def _optional_string(value: Any, *, source_name: str) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
-        raise ResponseParseError("bioRxiv paper has a non-string text field")
+        raise ResponseParseError(f"{source_name} paper has a non-string text field")
     normalized = " ".join(value.split())
     return normalized or None

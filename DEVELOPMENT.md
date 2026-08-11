@@ -192,7 +192,13 @@ systemctl list-timers litletter.timer
 ```python
 from datetime import date
 
-from litletter.sources import BioRxivClient, PubMedClient, PubMedDateField
+from litletter.sources import (
+    ArXivClient,
+    BioRxivClient,
+    MedRxivClient,
+    PubMedClient,
+    PubMedDateField,
+)
 
 with PubMedClient(email="you@example.com") as pubmed:
     papers = pubmed.search(
@@ -216,11 +222,30 @@ with BioRxivClient() as biorxiv:
         since=date(2026, 8, 1),
         until=date(2026, 8, 9),
     )
+
+with MedRxivClient() as medrxiv:
+    medical_preprints = medrxiv.fetch(
+        since=date(2026, 8, 1),
+        until=date(2026, 8, 9),
+    )
+
+with ArXivClient() as arxiv:
+    arxiv_preprints = arxiv.search(
+        "(ti:cancer OR abs:cancer)",
+        since=date(2026, 8, 1),
+        until=date(2026, 8, 9),
+    )
 ```
 
-PubMed accepts native PubMed queries. The official bioRxiv API lists records by
-date rather than performing Boolean title/abstract searches, so Litletter
-evaluates its normalized records locally.
+PubMed accepts native PubMed queries. The official bioRxiv/medRxiv API lists
+records by date rather than performing Boolean title/abstract searches, so
+Litletter evaluates its normalized records locally. Both Rxiv clients use the
+same API and pagination implementation with different server identifiers.
+
+The arXiv API accepts native selectors and returns Atom XML. `ArXivClient`
+combines its selector with an inclusive `submittedDate` range, normalizes the
+latest returned version, and waits three seconds between paginated requests by
+default in accordance with arXiv guidance.
 
 PubMed bounds use the Entrez date by default: when a record entered the
 database. This suits a daily discovery job. Use
@@ -301,8 +326,9 @@ does not silently change when a publisher updates its list.
 The Nature Index group represents publication membership only. Nature Index
 also applies article-type rules when calculating its metrics; Litletter does
 not reproduce those rules. `category:` matches bioRxiv's supplied category
-locally, for example `category:"systems biology"`; PubMed records have no such
-field.
+locally, for example `category:"systems biology"`; medRxiv uses medical subject
+categories, while arXiv uses identifiers such as `cs.LG` and `q-bio.CB`.
+PubMed records have no such field.
 
 ## Discovery implementation
 
@@ -312,7 +338,7 @@ The high-level helper connects fetching and local matching:
 from datetime import date
 
 from litletter import discover_papers, parse_query
-from litletter.sources import BioRxivClient, PubMedClient
+from litletter.sources import ArXivClient, BioRxivClient, MedRxivClient, PubMedClient
 
 query = parse_query(
     'title:("spatial transcriptomics" OR single-cell) AND abstract:(cancer OR tumour)'
@@ -321,6 +347,8 @@ query = parse_query(
 with (
     PubMedClient(email="you@example.com") as pubmed,
     BioRxivClient() as biorxiv,
+    MedRxivClient() as medrxiv,
+    ArXivClient() as arxiv,
 ):
     papers = discover_papers(
         query,
@@ -328,16 +356,20 @@ with (
         until=date(2026, 8, 9),
         pubmed=pubmed,
         biorxiv=biorxiv,
+        medrxiv=medrxiv,
+        arxiv=arxiv,
     )
 ```
 
-Litletter compiles a broad positive PubMed selector to reduce downloads, then
-applies the complete original query locally. Negative-only branches are not
-used for candidate selection because that could exclude valid results. If no
-safe positive selector exists, PubMed records are fetched using only the
-requested Entrez date range. Candidate limits are applied before local
-filtering and can therefore reduce match counts. Journal constraints compile to
-PubMed's `[Journal]` field; large groups are sent with POST automatically.
+Litletter compiles broad positive PubMed and arXiv selectors to reduce
+downloads, then applies the complete original query locally. Negative-only or
+source-irrelevant branches are not used for candidate selection because that
+could exclude valid results. If no safe positive selector exists, records are
+fetched using only the source's requested date range. Candidate limits are
+applied before local filtering and can therefore reduce match counts. PubMed
+journal constraints compile to its `[Journal]` field; large groups are sent
+with POST automatically. Rxiv records are fetched once per recurring run and
+shared across categories before local filtering.
 
 ## Interactive scratchpad
 

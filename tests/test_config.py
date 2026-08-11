@@ -25,6 +25,8 @@ def config_payload() -> dict:
                 "provider": "pubmed-default",
             },
             "biorxiv": {"enabled": True},
+            "medrxiv": {"enabled": False},
+            "arxiv": {"enabled": False},
         },
         "discovery": {"initial_lookback_days": 30, "overlap_days": 2},
         "categories": [
@@ -52,6 +54,9 @@ def test_parse_config_validates_and_resolves_paths(tmp_path: Path) -> None:
     assert config.newsletter.abstract_max_characters == 800
     assert config.newsletter.include_abstracts is False
     assert config.pubmed.provider == "pubmed-default"
+    assert config.biorxiv.enabled is True
+    assert config.medrxiv.enabled is False
+    assert config.arxiv.enabled is False
     assert config.summarization.enabled is False
     assert config.categories[0].id == "nsc-cancer"
     assert config.categories[0].sources == (PaperSource.PUBMED,)
@@ -91,9 +96,25 @@ def test_parse_config_rejects_invalid_values(mutate, message: str) -> None:
         parse_config(payload, path=Path("/tmp/litletter.json"))
 
 
-def test_category_cannot_use_disabled_source() -> None:
+@pytest.mark.parametrize("source", ["pubmed", "biorxiv", "medrxiv", "arxiv"])
+def test_category_cannot_use_disabled_source(source: str) -> None:
     payload = config_payload()
-    payload["sources"]["pubmed"]["enabled"] = False
+    payload["sources"][source]["enabled"] = False
+    payload["categories"][0]["sources"] = [source]
 
     with pytest.raises(ConfigurationError, match="uses disabled source"):
         parse_config(payload, path=Path("/tmp/litletter.json"))
+
+
+def test_medrxiv_and_arxiv_categories_are_supported_when_enabled() -> None:
+    payload = config_payload()
+    payload["sources"]["medrxiv"]["enabled"] = True
+    payload["sources"]["arxiv"]["enabled"] = True
+    payload["categories"][0]["sources"] = ["medrxiv", "arxiv"]
+
+    config = parse_config(payload, path=Path("/tmp/litletter.json"))
+
+    assert config.categories[0].sources == (
+        PaperSource.MEDRXIV,
+        PaperSource.ARXIV,
+    )

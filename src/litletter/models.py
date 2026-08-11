@@ -12,6 +12,8 @@ class PaperSource(StrEnum):
 
     PUBMED = "pubmed"
     BIORXIV = "biorxiv"
+    MEDRXIV = "medrxiv"
+    ARXIV = "arxiv"
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,7 +60,11 @@ class Paper:
     @property
     def is_original_research(self) -> bool:
         """Return whether source metadata identifies an original research work."""
-        if self.source is PaperSource.BIORXIV:
+        if self.source in {
+            PaperSource.BIORXIV,
+            PaperSource.MEDRXIV,
+            PaperSource.ARXIV,
+        }:
             return True
         normalized = {value.casefold().strip() for value in self.publication_types}
         if normalized & _NON_RESEARCH_PUBLICATION_TYPES:
