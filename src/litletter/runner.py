@@ -364,7 +364,7 @@ def _handle_open_edition(
     if edition.status == "sending":
         raise DatabaseError(
             f"edition {edition.id} has uncertain delivery state 'sending'; "
-            "inspect Postmark before changing its state"
+            "inspect the configured email provider before changing its state"
         )
     if not retry:
         raise DatabaseError(
@@ -395,9 +395,14 @@ def _deliver(
     newsletter: RenderedNewsletter,
     mailer: Mailer,
 ) -> DeliveryReceipt:
-    delivery_id = database.begin_delivery(edition.id, provider="postmark")
+    delivery_id = database.begin_delivery(edition.id, provider=mailer.provider)
     try:
         receipt = mailer.send(newsletter)
+        if receipt.provider != mailer.provider:
+            raise DeliveryUncertainError(
+                "mailer returned a receipt for a different provider; "
+                "delivery is uncertain"
+            )
     except DeliveryUncertainError:
         # Leave both records in `sending`: the provider may have accepted the
         # message even though Litletter did not receive its acknowledgement.

@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from litletter.app_config import AppConfig
+from litletter.app_config import (
+    AppConfig,
+    PostmarkProviderConfig,
+    ResendProviderConfig,
+)
 from litletter.errors import ConfigurationError
 from litletter.models import PaperSource
 from litletter.query import parse_query
@@ -63,10 +67,10 @@ class CategoryConfig:
 
 @dataclass(frozen=True, slots=True)
 class DeliveryConfig:
-    """Postmark delivery settings."""
+    """Provider-neutral email delivery settings."""
 
     provider: str
-    message_stream: str
+    message_stream: str | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,7 +173,21 @@ def validate_provider_references(
     if include_summarizer and config.summarization.enabled:
         app_config.summarizer(config.summarization.provider or "")
     if include_mailer:
-        app_config.mailer(config.delivery.provider)
+        mailer = app_config.mailer(config.delivery.provider)
+        if (
+            isinstance(mailer, PostmarkProviderConfig)
+            and config.delivery.message_stream is None
+        ):
+            raise ConfigurationError(
+                "delivery.message_stream is required for a Postmark provider"
+            )
+        if (
+            isinstance(mailer, ResendProviderConfig)
+            and config.delivery.message_stream is not None
+        ):
+            raise ConfigurationError(
+                "delivery.message_stream is only valid for a Postmark provider"
+            )
 
 
 def _parse_newsletter(value: Any) -> NewsletterConfig:
@@ -302,9 +320,12 @@ def _parse_categories(
 def _parse_delivery(value: Any) -> DeliveryConfig:
     raw = _object(value, "delivery")
     _only_keys(raw, {"provider", "message_stream"}, "delivery")
+    message_stream = (
+        _string(raw, "message_stream", "delivery") if "message_stream" in raw else None
+    )
     return DeliveryConfig(
         provider=_string(raw, "provider", "delivery"),
-        message_stream=_string(raw, "message_stream", "delivery"),
+        message_stream=message_stream,
     )
 
 

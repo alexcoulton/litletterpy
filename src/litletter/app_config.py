@@ -83,13 +83,24 @@ class PostmarkProviderConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ResendProviderConfig:
+    """Credentials for one Resend account."""
+
+    id: str
+    api_key: SecretConfig
+
+
+MailerProviderConfig = PostmarkProviderConfig | ResendProviderConfig
+
+
+@dataclass(frozen=True, slots=True)
 class AppConfig:
     """Validated global provider profiles shared by newsletters."""
 
     path: Path
     paper_sources: tuple[PubMedProviderConfig, ...]
     summarizers: tuple[DeepSeekProviderConfig, ...]
-    mailers: tuple[PostmarkProviderConfig, ...]
+    mailers: tuple[MailerProviderConfig, ...]
 
     def pubmed(self, profile_id: str) -> PubMedProviderConfig:
         return _profile(self.paper_sources, profile_id, "paper source")
@@ -97,7 +108,7 @@ class AppConfig:
     def summarizer(self, profile_id: str) -> DeepSeekProviderConfig:
         return _profile(self.summarizers, profile_id, "summarizer")
 
-    def mailer(self, profile_id: str) -> PostmarkProviderConfig:
+    def mailer(self, profile_id: str) -> MailerProviderConfig:
         return _profile(self.mailers, profile_id, "mailer")
 
     def has_literal_secrets(self) -> bool:
@@ -105,7 +116,12 @@ class AppConfig:
         secrets = [
             *(profile.api_key for profile in self.paper_sources if profile.api_key),
             *(profile.api_key for profile in self.summarizers),
-            *(profile.server_token for profile in self.mailers),
+            *(
+                profile.server_token
+                if isinstance(profile, PostmarkProviderConfig)
+                else profile.api_key
+                for profile in self.mailers
+            ),
         ]
         return any(secret.value is not None for secret in secrets)
 
@@ -162,7 +178,7 @@ def parse_app_config(payload: Any, *, path: Path) -> AppConfig:
         path=path,
         paper_sources=_parse_pubmed_profiles(providers.get("paper_sources", {})),
         summarizers=_parse_deepseek_profiles(providers.get("summarizers", {})),
-        mailers=_parse_postmark_profiles(providers.get("mailers", {})),
+        mailers=_parse_mailer_profiles(providers.get("mailers", {})),
     )
 
 
@@ -189,7 +205,11 @@ def app_config_template() -> dict[str, Any]:
                 "postmark-default": {
                     "type": "postmark",
                     "server_token_env": "LITLETTER_POSTMARK_TOKEN",
-                }
+                },
+                "resend-default": {
+                    "type": "resend",
+                    "api_key_env": "LITLETTER_RESEND_API_KEY",
+                },
             },
         },
     }
@@ -248,26 +268,40 @@ def _parse_deepseek_profiles(value: Any) -> tuple[DeepSeekProviderConfig, ...]:
     return tuple(profiles)
 
 
-def _parse_postmark_profiles(value: Any) -> tuple[PostmarkProviderConfig, ...]:
+def _parse_mailer_profiles(value: Any) -> tuple[MailerProviderConfig, ...]:
     raw = _object(value, "providers.mailers")
-    profiles: list[PostmarkProviderConfig] = []
+    profiles: list[MailerProviderConfig] = []
     for profile_id, value in raw.items():
         location = f"providers.mailers.{profile_id}"
         _validate_profile_id(profile_id, location)
         profile = _object(value, location)
-        _only_keys(
-            profile,
-            {"type", "server_token", "server_token_env"},
-            location,
-        )
-        if profile.get("type") != "postmark":
-            raise ConfigurationError(f"{location}.type must be 'postmark'")
-        profiles.append(
-            PostmarkProviderConfig(
-                id=profile_id,
-                server_token=_required_secret(profile, "server_token", location),
+        provider_type = profile.get("type")
+        if provider_type == "postmark":
+            _only_keys(
+                profile,
+                {"type", "server_token", "server_token_env"},
+                location,
             )
-        )
+            profiles.append(
+                PostmarkProviderConfig(
+                    id=profile_id,
+                    server_token=_required_secret(profile, "server_token", location),
+                )
+            )
+        elif provider_type == "resend":
+            _only_keys(
+                profile,
+                {"type", "api_key", "api_key_env"},
+                location,
+            )
+            profiles.append(
+                ResendProviderConfig(
+                    id=profile_id,
+                    api_key=_required_secret(profile, "api_key", location),
+                )
+            )
+        else:
+            raise ConfigurationError(f"{location}.type must be 'postmark' or 'resend'")
     return tuple(profiles)
 
 

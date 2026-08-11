@@ -37,7 +37,11 @@ def payload() -> dict:
                 "postmark-default": {
                     "type": "postmark",
                     "server_token_env": "POSTMARK_TOKEN",
-                }
+                },
+                "resend-default": {
+                    "type": "resend",
+                    "api_key_env": "RESEND_API_KEY",
+                },
             },
         },
     }
@@ -56,6 +60,12 @@ def test_app_config_resolves_profiles_without_revealing_secrets(tmp_path: Path) 
             environ={"POSTMARK_TOKEN": "postmark-secret"}
         )
         == "postmark-secret"
+    )
+    assert (
+        config.mailer("resend-default").api_key.resolve(
+            environ={"RESEND_API_KEY": "resend-secret"}
+        )
+        == "resend-secret"
     )
 
 
@@ -136,3 +146,45 @@ def test_disabled_provider_validation_allows_one_run_bypass(tmp_path: Path) -> N
         validate_provider_references(newsletter, app)
 
     validate_provider_references(newsletter, app, include_summarizer=False)
+
+
+def test_delivery_settings_are_validated_for_selected_mailer(tmp_path: Path) -> None:
+    newsletter_payload = {
+        "version": 2,
+        "database": "state.sqlite3",
+        "newsletter": {
+            "title": "Litletter",
+            "from": "sender@example.com",
+            "to": ["reader@example.com"],
+            "timezone": "UTC",
+        },
+        "sources": {
+            "pubmed": {"enabled": True, "provider": "pubmed-default"},
+            "biorxiv": {"enabled": False},
+        },
+        "discovery": {"initial_lookback_days": 30, "overlap_days": 2},
+        "categories": [
+            {
+                "id": "cancer",
+                "name": "Cancer",
+                "query": "cancer",
+                "sources": ["pubmed"],
+            }
+        ],
+        "summarization": {"enabled": False},
+        "delivery": {"provider": "resend-default"},
+    }
+    app = parse_app_config(payload(), path=tmp_path / "app.json")
+    newsletter = parse_config(newsletter_payload, path=tmp_path / "newsletter.json")
+
+    validate_provider_references(newsletter, app)
+
+    newsletter_payload["delivery"]["message_stream"] = "broadcasts"
+    newsletter = parse_config(newsletter_payload, path=tmp_path / "newsletter.json")
+    with pytest.raises(ConfigurationError, match="only valid for a Postmark"):
+        validate_provider_references(newsletter, app)
+
+    newsletter_payload["delivery"] = {"provider": "postmark-default"}
+    newsletter = parse_config(newsletter_payload, path=tmp_path / "newsletter.json")
+    with pytest.raises(ConfigurationError, match="required for a Postmark"):
+        validate_provider_references(newsletter, app)

@@ -3,7 +3,7 @@
   "database": "state/litletter.sqlite3",
   "newsletter": {
     "title": "My Litletter",
-    "from": "you@example.com",
+    "from": "Litletter <newsletter@updates.example.com>",
     "to": ["you@example.com"],
     "timezone": "Europe/London",
     "abstract_max_characters": 800
@@ -44,7 +44,6 @@
     "failure_policy": "fallback"
   },
   "delivery": {
-    "provider": "postmark-default",
-    "message_stream": "broadcasts"
+    "provider": "resend-default"
   }
 }

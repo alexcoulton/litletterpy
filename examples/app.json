@@ -17,6 +17,10 @@
       }
     },
     "mailers": {
+      "resend-default": {
+        "type": "resend",
+        "api_key_env": "LITLETTER_RESEND_API_KEY"
+      },
       "postmark-default": {
         "type": "postmark",
         "server_token_env": "LITLETTER_POSTMARK_TOKEN"

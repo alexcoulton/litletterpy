@@ -16,6 +16,8 @@ from zoneinfo import ZoneInfo
 
 from litletter.app_config import (
     AppConfig,
+    PostmarkProviderConfig,
+    ResendProviderConfig,
     app_config_template,
     default_app_config_path,
     load_app_config,
@@ -25,7 +27,7 @@ from litletter.config import (
     load_config,
     validate_provider_references,
 )
-from litletter.delivery import PostmarkMailer
+from litletter.delivery import Mailer, PostmarkMailer, ResendMailer
 from litletter.errors import ConfigurationError, DatabaseError, LitletterError
 from litletter.models import PaperSource
 from litletter.runner import RunResult, enrich_pending_papers, run_once
@@ -146,15 +148,15 @@ def _build_parser() -> argparse.ArgumentParser:
     outcome.add_argument(
         "--delivered",
         action="store_true",
-        help="mark submitted after finding the message in Postmark",
+        help="mark submitted after finding the message at the email provider",
     )
     outcome.add_argument(
         "--not-delivered",
         action="store_true",
-        help="mark failed after confirming Postmark did not accept it",
+        help="mark failed after confirming the email provider did not accept it",
     )
     resolve.add_argument(
-        "--message-id", help="Postmark message ID (required with --delivered)"
+        "--message-id", help="provider message ID (required with --delivered)"
     )
     resolve.set_defaults(handler=_resolve_edition)
     return parser
@@ -226,9 +228,13 @@ def _validate_app_config(args: argparse.Namespace) -> int:
     for profile in app_config.summarizers:
         print(f"DeepSeek {profile.id} API key: {profile.api_key.availability()}")
     for profile in app_config.mailers:
-        print(
-            f"Postmark {profile.id} server token: {profile.server_token.availability()}"
-        )
+        if isinstance(profile, PostmarkProviderConfig):
+            print(
+                f"Postmark {profile.id} server token: "
+                f"{profile.server_token.availability()}"
+            )
+        elif isinstance(profile, ResendProviderConfig):
+            print(f"Resend {profile.id} API key: {profile.api_key.availability()}")
     return 0
 
 
@@ -277,15 +283,7 @@ def _run(args: argparse.Namespace) -> int:
         )
         mailer = None
         if not args.dry_run:
-            provider = app_config.mailer(config.delivery.provider)
-            mailer = stack.enter_context(
-                PostmarkMailer(
-                    server_token=provider.server_token.resolve(),
-                    from_address=config.newsletter.from_address,
-                    to=config.newsletter.to,
-                    message_stream=config.delivery.message_stream,
-                )
-            )
+            mailer = _create_mailer(config, app_config, stack)
         today = args.date or datetime.now(ZoneInfo(config.newsletter.timezone)).date()
         result = run_once(
             config,
@@ -344,6 +342,32 @@ def _create_summarizer(
             audience=settings.audience,
             max_words=settings.max_words,
             timeout=provider.timeout_seconds,
+        )
+    )
+
+
+def _create_mailer(
+    config: LitletterConfig, app_config: AppConfig, stack: ExitStack
+) -> Mailer:
+    provider = app_config.mailer(config.delivery.provider)
+    if isinstance(provider, PostmarkProviderConfig):
+        if config.delivery.message_stream is None:
+            raise ConfigurationError(
+                "delivery.message_stream is required for a Postmark provider"
+            )
+        return stack.enter_context(
+            PostmarkMailer(
+                server_token=provider.server_token.resolve(),
+                from_address=config.newsletter.from_address,
+                to=config.newsletter.to,
+                message_stream=config.delivery.message_stream,
+            )
+        )
+    return stack.enter_context(
+        ResendMailer(
+            api_key=provider.api_key.resolve(),
+            from_address=config.newsletter.from_address,
+            to=config.newsletter.to,
         )
     )
 

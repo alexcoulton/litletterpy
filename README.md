@@ -4,7 +4,8 @@ Litletter is a local Python package for fetching and normalizing papers from
 PubMed and bioRxiv, then applying a shared Boolean query language to their
 titles, abstracts, journals, and categories. Its CLI can run those searches on
 a schedule, retain delivery state in SQLite, and send a categorized email
-newsletter through Postmark without resending previously delivered papers.
+newsletter through Resend or Postmark without resending previously delivered
+papers.
 
 ## Development
 
@@ -123,6 +124,31 @@ Dry runs can create cached summaries and therefore make billable DeepSeek API
 calls, but still never create or deliver an email edition. Papers without an
 abstract remain unsummarized rather than being guessed from the title.
 
+### Resend delivery
+
+Create a Resend API key and verify a domain that you own. Set
+`newsletter.from` to any address at that verified domain, select a Resend mailer
+profile, and omit the Postmark-only `delivery.message_stream` setting:
+
+```json
+"delivery": {
+  "provider": "resend-default"
+}
+```
+
+Provide the API key through the environment variable referenced by the profile
+or store it directly as `api_key` in the private app config:
+
+```console
+export LITLETTER_RESEND_API_KEY="re_your-api-key"
+uv run litletter run --config litletter.json
+```
+
+Litletter sends through Resend's Email API and attaches an idempotency key based
+on the immutable edition ID. Resend requires a verified domain for sending to
+real recipients; public email domains such as Gmail cannot be verified as your
+sending domain.
+
 ### Postmark delivery
 
 Create a Postmark server, verify the individual address used by
@@ -140,6 +166,17 @@ setup; the sender and recipient can be the same address. A Broadcast stream is
 appropriate for newsletters and lets Postmark apply its broadcast/unsubscribe
 handling.
 
+To select Postmark instead, use both its provider profile and stream ID:
+
+```json
+"delivery": {
+  "provider": "postmark-default",
+  "message_stream": "broadcasts"
+}
+```
+
+### Delivery state and recovery
+
 Use `litletter status --config litletter.json` to inspect the watermark, pending
 papers, submitted editions, and any edition requiring attention. Provider
 requests are deliberately not retried automatically. A definite rejection
@@ -150,15 +187,15 @@ uv run litletter run --config litletter.json --retry-open-edition
 ```
 
 If a timeout makes the outcome uncertain, the edition remains in `sending` and
-all future sends stop. Check Postmark using the edition metadata shown by
-`litletter status`, then resolve it explicitly:
+all future sends stop. Check the selected provider using the edition metadata
+shown by `litletter status`, then resolve it explicitly:
 
 ```console
-# The message exists in Postmark:
+# The message exists at the provider:
 uv run litletter edition resolve --config litletter.json EDITION_ID \
-  --delivered --message-id POSTMARK_MESSAGE_ID
+  --delivered --message-id PROVIDER_MESSAGE_ID
 
-# Postmark confirms that it was not accepted:
+# The provider confirms that it was not accepted:
 uv run litletter edition resolve --config litletter.json EDITION_ID \
   --not-delivered
 uv run litletter run --config litletter.json --retry-open-edition

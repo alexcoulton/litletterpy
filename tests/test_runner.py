@@ -61,14 +61,17 @@ class FakePubMed:
 
 @dataclass
 class FakeMailer:
+    provider: str = "postmark"
     newsletters: list[RenderedNewsletter] = field(default_factory=list)
 
     def send(self, newsletter: RenderedNewsletter) -> DeliveryReceipt:
         self.newsletters.append(newsletter)
-        return DeliveryReceipt(provider="postmark", message_id="message-1")
+        return DeliveryReceipt(provider=self.provider, message_id="message-1")
 
 
 class UncertainMailer:
+    provider = "postmark"
+
     def send(self, newsletter: RenderedNewsletter) -> DeliveryReceipt:
         raise DeliveryUncertainError("request timed out after submission")
 
@@ -196,6 +199,10 @@ def test_run_sends_one_categorized_edition_and_deduplicates_future_runs(
     assert "Also in: Nature" in mailer.newsletters[0].text
     assert database.status().submitted_editions == 1
     assert database.unsent_papers() == []
+    assert (
+        database.connection.execute("SELECT provider FROM deliveries").fetchone()[0]
+        == "postmark"
+    )
 
     second = run_once(
         settings,
@@ -209,6 +216,29 @@ def test_run_sends_one_categorized_edition_and_deduplicates_future_runs(
     assert second.since == date(2026, 8, 7)
     assert second.unsent == 0
     assert len(mailer.newsletters) == 1
+    database.close()
+
+
+def test_runner_records_the_selected_mailer_provider(tmp_path: Path) -> None:
+    settings = config(tmp_path)
+    database = open_database(tmp_path)
+
+    result = run_once(
+        settings,
+        database,
+        pubmed=FakePubMed([paper()]),
+        biorxiv=None,
+        mailer=FakeMailer(provider="resend"),
+        today=date(2026, 8, 9),
+        bootstrap=True,
+    )
+
+    assert result.receipt is not None
+    assert result.receipt.provider == "resend"
+    assert (
+        database.connection.execute("SELECT provider FROM deliveries").fetchone()[0]
+        == "resend"
+    )
     database.close()
 
 
